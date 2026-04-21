@@ -19,24 +19,16 @@ function formatPhaseLabel(phase: FrontendState["runtime"]["phase"]) {
   }
 }
 
-function formatTimestamp(epochMs: number | null) {
-  if (!epochMs) {
-    return "not yet";
-  }
-
-  return new Date(epochMs).toLocaleString();
-}
-
 function formatRuntimeNote(runtime: RuntimeSnapshot) {
   if (runtime.phase === "paused" && runtime.pausedUntilEpochMs) {
-    return `Paused until ${formatTimestamp(runtime.pausedUntilEpochMs)}.`;
+    return `Paused until ${new Date(runtime.pausedUntilEpochMs).toLocaleString()}`;
   }
 
   if (runtime.nextCheckInSeconds === null) {
-    return "Waiting for the next activity cycle.";
+    return "Waiting for the next activity cycle";
   }
 
-  return `Next check in ${runtime.nextCheckInSeconds}s.`;
+  return `Next check in ${runtime.nextCheckInSeconds}s`;
 }
 
 function App() {
@@ -166,10 +158,8 @@ function App() {
             <p className="eyebrow">never-afk</p>
             <h1 className="screen-title">Settings</h1>
             <p className="screen-summary">
-              Quietly keeps activity alive after it confirms that you are idle.
-            </p>
-            <p className="screen-runtime">
-              {serverState.runtime.detailLabel} {formatRuntimeNote(serverState.runtime)}
+              Configure startup behavior, idle delays and the synthetic key used
+              by the resident engine.
             </p>
           </div>
 
@@ -181,15 +171,13 @@ function App() {
           </div>
         </header>
 
-        {serverState.runtime.lastError ? (
-          <div className="content-body">
+        <div className="content-body">
+          {serverState.runtime.lastError ? (
             <p className="status-banner" role="status">
               {serverState.runtime.lastError}
             </p>
-          </div>
-        ) : null}
+          ) : null}
 
-        <div className="content-body">
           <SettingsForm
             config={draftConfig}
             customInputLabel={serverState.customInputLabel}
@@ -197,19 +185,24 @@ function App() {
             busy={busy}
             dirty={dirty}
             saveError={saveError}
-            runtime={serverState.runtime}
             onChange={(nextConfig) => {
               setSaveError(null);
               setDraftConfig(nextConfig);
             }}
             onSave={handleSave}
           />
-
-          <p className="privacy-footnote">
-            Local-only utility. No telemetry, no network traffic, and no input
-            history is stored.
-          </p>
         </div>
+
+        <footer className="footer-strip" aria-label="Runtime status">
+          <span>
+            Status <strong>{serverState.runtime.statusLabel}</strong>
+          </span>
+          <span>{formatRuntimeNote(serverState.runtime)}</span>
+          <span>
+            Current key <strong>{serverState.runtime.resolvedInputLabel}</strong>
+          </span>
+          <span>Local only</span>
+        </footer>
       </section>
     </main>
   );

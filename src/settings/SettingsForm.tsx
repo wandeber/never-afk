@@ -1,4 +1,5 @@
-import type { AppConfig, RuntimeSnapshot, SafeKeyPreset, SafeKeyOption } from "../types";
+import type { ReactNode } from "react";
+import type { AppConfig, SafeKeyPreset, SafeKeyOption } from "../types";
 
 type SettingsFormProps = {
   config: AppConfig;
@@ -7,9 +8,14 @@ type SettingsFormProps = {
   busy: boolean;
   dirty: boolean;
   saveError: string | null;
-  runtime: RuntimeSnapshot;
   onChange: (nextConfig: AppConfig) => void;
   onSave: () => Promise<void>;
+};
+
+type PreferenceRowProps = {
+  title: string;
+  description: string;
+  children: ReactNode;
 };
 
 function updateNumberField(value: string, fallback: number | null = null) {
@@ -21,6 +27,25 @@ function updateNumberField(value: string, fallback: number | null = null) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function PreferenceRow({
+  title,
+  description,
+  children,
+}: PreferenceRowProps) {
+  // Keep each setting in a strict label/control row so the pane scans like a
+  // desktop preferences window instead of a stacked web form.
+  return (
+    <div className="preference-row">
+      <div className="preference-copy">
+        <h3>{title}</h3>
+        <p>{description}</p>
+      </div>
+
+      <div className="preference-control">{children}</div>
+    </div>
+  );
+}
+
 export function SettingsForm({
   config,
   customInputLabel,
@@ -28,108 +53,132 @@ export function SettingsForm({
   busy,
   dirty,
   saveError,
-  runtime,
   onChange,
   onSave,
 }: SettingsFormProps) {
-  const supportedSafeKeys = safeKeyOptions.filter((option) => option.supported);
+  const supportedSafeKeysLabel = safeKeyOptions
+    .filter((option) => option.supported)
+    .map((option) => option.label)
+    .join(", ");
 
   return (
-    <section className="settings-screen">
-      <div className="settings-group">
-        <div className="group-heading">
+    <section className="preferences-pane">
+      <section className="preferences-group">
+        <div className="preferences-group-header">
           <h2>Startup</h2>
-          <p>Basic availability and login behavior.</p>
+          <p>Basic availability and launch behavior.</p>
         </div>
 
-        <div className="form-grid form-grid-compact">
-          <label className="field checkbox-field checkbox-row">
-            <input
-              type="checkbox"
-              checked={config.enabled}
-              onChange={(event) =>
-                onChange({ ...config, enabled: event.currentTarget.checked })
-              }
-            />
-            <span>
-              <strong>Enabled</strong>
-              <small>Allow the engine to keep cycling quietly in the background.</small>
-            </span>
-          </label>
+        <div className="preferences-list">
+          <PreferenceRow
+            title="Enabled"
+            description="Allow the engine to keep cycling quietly in the background."
+          >
+            <label className="checkbox-inline">
+              <input
+                className="preference-checkbox"
+                type="checkbox"
+                checked={config.enabled}
+                onChange={(event) =>
+                  onChange({ ...config, enabled: event.currentTarget.checked })
+                }
+              />
+              <span>On</span>
+            </label>
+          </PreferenceRow>
 
-          <label className="field checkbox-field checkbox-row">
-            <input
-              type="checkbox"
-              checked={config.startAtLogin}
-              onChange={(event) =>
-                onChange({ ...config, startAtLogin: event.currentTarget.checked })
-              }
-            />
-            <span>
-              <strong>Start at login</strong>
-              <small>Launch the utility automatically after you sign in.</small>
-            </span>
-          </label>
+          <PreferenceRow
+            title="Start at login"
+            description="Launch the utility automatically after you sign in."
+          >
+            <label className="checkbox-inline">
+              <input
+                className="preference-checkbox"
+                type="checkbox"
+                checked={config.startAtLogin}
+                onChange={(event) =>
+                  onChange({
+                    ...config,
+                    startAtLogin: event.currentTarget.checked,
+                  })
+                }
+              />
+              <span>On</span>
+            </label>
+          </PreferenceRow>
         </div>
-      </div>
+      </section>
 
-      <div className="settings-group">
-        <div className="group-heading">
+      <section className="preferences-group">
+        <div className="preferences-group-header">
           <h2>Delays</h2>
           <p>Control when the engine starts watching for idleness.</p>
         </div>
 
-        <div className="form-grid">
-          <label className="field">
-            <span>Quiet period</span>
-            <input
-              type="number"
-              min={1}
-              value={config.quietPeriodSeconds}
-              onChange={(event) =>
-                onChange({
-                  ...config,
-                  quietPeriodSeconds: updateNumberField(
-                    event.currentTarget.value,
-                    config.quietPeriodSeconds,
-                  ) ?? config.quietPeriodSeconds,
-                })
-              }
-            />
-            <small>Seconds to wait before observation starts.</small>
-          </label>
+        <div className="preferences-list">
+          <PreferenceRow
+            title="Quiet period"
+            description="Time to wait before observation starts."
+          >
+            <div className="preference-inline">
+              <input
+                className="preference-input preference-input-compact"
+                type="number"
+                min={1}
+                value={config.quietPeriodSeconds}
+                onChange={(event) =>
+                  onChange({
+                    ...config,
+                    quietPeriodSeconds: updateNumberField(
+                      event.currentTarget.value,
+                      config.quietPeriodSeconds,
+                    ) ?? config.quietPeriodSeconds,
+                  })
+                }
+              />
+              <span className="preference-unit">seconds</span>
+            </div>
+          </PreferenceRow>
 
-          <label className="field">
-            <span>Idle confirmation</span>
-            <input
-              type="number"
-              min={1}
-              value={config.idleConfirmationPeriodSeconds}
-              onChange={(event) =>
-                onChange({
-                  ...config,
-                  idleConfirmationPeriodSeconds: updateNumberField(
-                    event.currentTarget.value,
-                    config.idleConfirmationPeriodSeconds,
-                  ) ?? config.idleConfirmationPeriodSeconds,
-                })
-              }
-            />
-            <small>Extra seconds used to confirm that no human input happened.</small>
-          </label>
+          <PreferenceRow
+            title="Idle confirmation"
+            description="Extra time used to confirm that no human input happened."
+          >
+            <div className="preference-inline">
+              <input
+                className="preference-input preference-input-compact"
+                type="number"
+                min={1}
+                value={config.idleConfirmationPeriodSeconds}
+                onChange={(event) =>
+                  onChange({
+                    ...config,
+                    idleConfirmationPeriodSeconds: updateNumberField(
+                      event.currentTarget.value,
+                      config.idleConfirmationPeriodSeconds,
+                    ) ?? config.idleConfirmationPeriodSeconds,
+                  })
+                }
+              />
+              <span className="preference-unit">seconds</span>
+            </div>
+          </PreferenceRow>
         </div>
-      </div>
+      </section>
 
-      <div className="settings-group">
-        <div className="group-heading">
-          <h2>Synthetic key</h2>
+      <section className="preferences-group">
+        <div className="preferences-group-header">
+          <h2>Synthetic Key</h2>
           <p>Choose the key that will be sent when the engine acts.</p>
         </div>
 
-        <div className="form-grid">
-          <label className="field">
-            <span>Safe key preset</span>
+        <div className="preferences-list">
+          <PreferenceRow
+            title="Safe key preset"
+            description={`Built-in presets available here: ${supportedSafeKeysLabel}.`}
+          >
             <select
+              className="preference-input"
               value={config.selectedKey}
               disabled={config.customInputEnabled}
               onChange={(event) =>
@@ -149,34 +198,37 @@ export function SettingsForm({
                 </option>
               ))}
             </select>
-            <small>
-              Available here: {supportedSafeKeys.map((option) => option.label).join(", ")}
-            </small>
-          </label>
+          </PreferenceRow>
 
-          <label className="field checkbox-field checkbox-row">
-            <input
-              type="checkbox"
-              checked={config.customInputEnabled}
-              onChange={(event) =>
-                onChange({
-                  ...config,
-                  customInputEnabled: event.currentTarget.checked,
-                  customInputValue: event.currentTarget.checked
-                    ? config.customInputValue
-                    : null,
-                })
-              }
-            />
-            <span>
-              <strong>Use custom input</strong>
-              <small>Switch to a platform-specific key code when needed.</small>
-            </span>
-          </label>
+          <PreferenceRow
+            title="Use custom input"
+            description="Switch to a platform-specific key code when the preset list is not enough."
+          >
+            <label className="checkbox-inline">
+              <input
+                className="preference-checkbox"
+                type="checkbox"
+                checked={config.customInputEnabled}
+                onChange={(event) =>
+                  onChange({
+                    ...config,
+                    customInputEnabled: event.currentTarget.checked,
+                    customInputValue: event.currentTarget.checked
+                      ? config.customInputValue
+                      : null,
+                  })
+                }
+              />
+              <span>Use custom code</span>
+            </label>
+          </PreferenceRow>
 
-          <label className="field field-wide">
-            <span>{customInputLabel}</span>
+          <PreferenceRow
+            title={customInputLabel}
+            description="Stored as the current platform mapping and only used when custom input is enabled."
+          >
             <input
+              className="preference-input preference-input-compact"
               type="number"
               min={0}
               value={config.customInputValue ?? ""}
@@ -188,16 +240,9 @@ export function SettingsForm({
                 })
               }
             />
-            <small>
-              Stored as the current platform mapping and only used when custom input is enabled.
-            </small>
-          </label>
+          </PreferenceRow>
         </div>
-
-        <p className="section-note">
-          Current runtime key: <strong>{runtime.resolvedInputLabel}</strong>
-        </p>
-      </div>
+      </section>
 
       {saveError ? (
         <p className="status-banner" role="alert">
@@ -212,7 +257,7 @@ export function SettingsForm({
           onClick={onSave}
           disabled={!dirty || busy}
         >
-          {busy ? "Saving..." : "Save settings"}
+          {busy ? "Saving..." : "Save Settings"}
         </button>
       </div>
     </section>
