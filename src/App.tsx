@@ -49,6 +49,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [isInteracting, setIsInteracting] = useState(false);
   const latestDraftRef = useRef<AppConfig | null>(null);
 
   const dirty =
@@ -132,14 +133,15 @@ function App() {
   }, [loadInitialState]);
 
   useEffect(() => {
-    if (!serverState || dirty || busy) {
+    if (!serverState || dirty || busy || isInteracting) {
       return undefined;
     }
 
     let cancelled = false;
 
-    // Polling is paused while the user has unsaved edits so the form does not
-    // visually fight with the runtime refresh loop during interaction.
+    // Polling is paused while the user is editing or while an autosave request
+    // is in flight. Native selects can otherwise lose their pending choice when
+    // the runtime snapshot refreshes underneath the same form controls.
     const intervalId = window.setInterval(() => {
       void (async () => {
         try {
@@ -158,7 +160,7 @@ function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [applyServerState, busy, dirty, serverState]);
+  }, [applyServerState, busy, dirty, isInteracting, serverState]);
 
   useEffect(() => {
     if (!draftConfig || !dirty || busy) {
@@ -225,6 +227,7 @@ function App() {
             dirty={dirty}
             saveError={saveError}
             saveState={saveState}
+            onInteractionChange={setIsInteracting}
             onChange={(nextConfig) => {
               setSaveError(null);
               setSaveState("idle");

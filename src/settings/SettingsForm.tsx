@@ -11,6 +11,7 @@ type SettingsFormProps = {
   dirty: boolean;
   saveError: string | null;
   saveState: SaveState;
+  onInteractionChange: (interacting: boolean) => void;
   onChange: (nextConfig: AppConfig) => void;
 };
 
@@ -81,6 +82,7 @@ export function SettingsForm({
   dirty,
   saveError,
   saveState,
+  onInteractionChange,
   onChange,
 }: SettingsFormProps) {
   const supportedPresetKeysLabel = safeKeyOptions
@@ -89,7 +91,23 @@ export function SettingsForm({
     .join(", ");
 
   return (
-    <section className="preferences-pane">
+    <section
+      className="preferences-pane"
+      onFocusCapture={() => onInteractionChange(true)}
+      onBlurCapture={(event) => {
+        // Keep the interaction lock active while focus moves between controls in
+        // the same pane, then release it only once focus truly leaves settings.
+        const nextFocusedElement = event.relatedTarget;
+        if (
+          nextFocusedElement instanceof Node &&
+          event.currentTarget.contains(nextFocusedElement)
+        ) {
+          return;
+        }
+
+        onInteractionChange(false);
+      }}
+    >
       <section className="preferences-group">
         <div className="preferences-group-header">
           <h2>Startup</h2>
