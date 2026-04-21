@@ -56,7 +56,7 @@ export function SettingsForm({
   onChange,
   onSave,
 }: SettingsFormProps) {
-  const supportedSafeKeysLabel = safeKeyOptions
+  const supportedPresetKeysLabel = safeKeyOptions
     .filter((option) => option.supported)
     .map((option) => option.label)
     .join(", ");
@@ -174,8 +174,8 @@ export function SettingsForm({
 
         <div className="preferences-list">
           <PreferenceRow
-            title="Safe key preset"
-            description={`Built-in presets available here: ${supportedSafeKeysLabel}.`}
+            title="Preset key"
+            description={`Built-in presets available here: ${supportedPresetKeysLabel}. Modifier presets use canonical left-side key codes.`}
           >
             <select
               className="preference-input"

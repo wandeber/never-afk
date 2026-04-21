@@ -39,6 +39,12 @@ pub enum ActivityMethod {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SafeKeyPreset {
+    #[serde(rename = "Fn")]
+    Fn,
+    #[serde(rename = "Shift")]
+    Shift,
+    #[serde(rename = "Option")]
+    OptionKey,
     #[serde(rename = "F13")]
     F13,
     #[serde(rename = "F14")]
@@ -66,7 +72,10 @@ pub enum SafeKeyPreset {
 }
 
 impl SafeKeyPreset {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 15] = [
+        Self::Fn,
+        Self::Shift,
+        Self::OptionKey,
         Self::F13,
         Self::F14,
         Self::F15,
@@ -83,6 +92,9 @@ impl SafeKeyPreset {
 
     pub fn label(self) -> &'static str {
         match self {
+            Self::Fn => "Fn",
+            Self::Shift => "Shift",
+            Self::OptionKey => "Option / Alt",
             Self::F13 => "F13",
             Self::F14 => "F14",
             Self::F15 => "F15",
@@ -100,17 +112,25 @@ impl SafeKeyPreset {
 
     pub fn supported_on(self, platform: PlatformKind) -> bool {
         match platform {
-            // Carbon only exposes virtual key codes up to F20. We keep F21-F24 available
-            // for Windows and for explicit custom mappings, but we do not guess undocumented
-            // macOS key codes because this project should prefer boring correctness.
+            // macOS exposes the function / globe key as a dedicated virtual key code, and
+            // we also allow a small set of modifier presets. F21-F24 stay disabled because
+            // Carbon only exposes built-in virtual key codes up to F20.
             PlatformKind::Macos => !matches!(self, Self::F21 | Self::F22 | Self::F23 | Self::F24),
-            PlatformKind::Windows => true,
+            // Windows does not expose a portable equivalent for Fn because that key is
+            // typically handled in firmware rather than the standard virtual-key layer.
+            PlatformKind::Windows => !matches!(self, Self::Fn),
             PlatformKind::Unsupported => false,
         }
     }
 
     pub fn macos_key_code(self) -> Option<u16> {
         match self {
+            Self::Fn => Some(0x3F),
+            // Modifier presets use the left-side virtual key codes so there is one
+            // canonical built-in preset per modifier without introducing left/right
+            // variants into the basic settings UI.
+            Self::Shift => Some(0x38),
+            Self::OptionKey => Some(0x3A),
             Self::F13 => Some(0x69),
             Self::F14 => Some(0x6B),
             Self::F15 => Some(0x71),
@@ -123,20 +143,23 @@ impl SafeKeyPreset {
         }
     }
 
-    pub fn windows_virtual_key(self) -> u16 {
+    pub fn windows_virtual_key(self) -> Option<u16> {
         match self {
-            Self::F13 => 0x7C,
-            Self::F14 => 0x7D,
-            Self::F15 => 0x7E,
-            Self::F16 => 0x7F,
-            Self::F17 => 0x80,
-            Self::F18 => 0x81,
-            Self::F19 => 0x82,
-            Self::F20 => 0x83,
-            Self::F21 => 0x84,
-            Self::F22 => 0x85,
-            Self::F23 => 0x86,
-            Self::F24 => 0x87,
+            Self::Fn => None,
+            Self::Shift => Some(0x10),
+            Self::OptionKey => Some(0x12),
+            Self::F13 => Some(0x7C),
+            Self::F14 => Some(0x7D),
+            Self::F15 => Some(0x7E),
+            Self::F16 => Some(0x7F),
+            Self::F17 => Some(0x80),
+            Self::F18 => Some(0x81),
+            Self::F19 => Some(0x82),
+            Self::F20 => Some(0x83),
+            Self::F21 => Some(0x84),
+            Self::F22 => Some(0x85),
+            Self::F23 => Some(0x86),
+            Self::F24 => Some(0x87),
         }
     }
 }
@@ -276,7 +299,7 @@ impl AppConfig {
         Ok(ResolvedKeyboardInput {
             display_label: self.selected_key.label().to_string(),
             macos_key_code: self.selected_key.macos_key_code(),
-            windows_virtual_key_code: Some(self.selected_key.windows_virtual_key()),
+            windows_virtual_key_code: self.selected_key.windows_virtual_key(),
             hid_usage_code: None,
         })
     }
@@ -386,5 +409,49 @@ mod tests {
 
         assert_eq!(normalized.platform_key_mapping.macos_key_code, Some(113));
         assert_eq!(normalized.platform_key_mapping.windows_virtual_key_code, None);
+    }
+
+    #[test]
+    fn resolves_fn_on_macos() {
+        let config = AppConfig {
+            selected_key: SafeKeyPreset::Fn,
+            ..AppConfig::default()
+        };
+
+        let resolved = config.resolved_input(PlatformKind::Macos).unwrap();
+
+        assert_eq!(resolved.display_label, "Fn");
+        assert_eq!(resolved.macos_key_code, Some(0x3F));
+        assert_eq!(resolved.windows_virtual_key_code, None);
+    }
+
+    #[test]
+    fn resolves_modifier_presets_on_both_platforms() {
+        let shift = AppConfig {
+            selected_key: SafeKeyPreset::Shift,
+            ..AppConfig::default()
+        };
+        let option = AppConfig {
+            selected_key: SafeKeyPreset::OptionKey,
+            ..AppConfig::default()
+        };
+
+        let mac_shift = shift.resolved_input(PlatformKind::Macos).unwrap();
+        let windows_option = option.resolved_input(PlatformKind::Windows).unwrap();
+
+        assert_eq!(mac_shift.macos_key_code, Some(0x38));
+        assert_eq!(windows_option.windows_virtual_key_code, Some(0x12));
+    }
+
+    #[test]
+    fn rejects_fn_as_built_in_key_on_windows() {
+        let config = AppConfig {
+            selected_key: SafeKeyPreset::Fn,
+            ..AppConfig::default()
+        };
+
+        let result = config.validate_and_normalize(PlatformKind::Windows);
+
+        assert!(result.is_err());
     }
 }

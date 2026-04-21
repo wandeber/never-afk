@@ -1,4 +1,7 @@
 export type SafeKeyPreset =
+  | "Fn"
+  | "Shift"
+  | "Option"
   | "F13"
   | "F14"
   | "F15"
