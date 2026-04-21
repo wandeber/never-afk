@@ -19,8 +19,11 @@ type SettingsFormProps = {
   saveState: SaveState;
   permissionBusy: boolean;
   permissionNote: string | null;
+  virtualKeyBusy: boolean;
+  virtualKeyNote: string | null;
   onRequestSyntheticInputAccess: () => void;
   onRevealSyntheticInputAccessTarget: () => void;
+  onTriggerVirtualA: () => void;
   onChange: (nextConfig: AppConfig) => void;
 };
 
@@ -94,8 +97,11 @@ export const SettingsForm = memo(function SettingsForm({
   saveState,
   permissionBusy,
   permissionNote,
+  virtualKeyBusy,
+  virtualKeyNote,
   onRequestSyntheticInputAccess,
   onRevealSyntheticInputAccessTarget,
+  onTriggerVirtualA,
   onChange,
 }: SettingsFormProps) {
   const supportedPresetKeysLabel = safeKeyOptions
@@ -339,6 +345,26 @@ export const SettingsForm = memo(function SettingsForm({
                 >
                   Reveal Binary
                 </button>
+              </div>
+            </PreferenceRow>
+
+            <PreferenceRow
+              title="Virtual keyboard test"
+              description="Type a literal capital A into the currently focused app so you can verify delivery end to end in TextEdit or another editor."
+            >
+              <div className="stacked-control">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={virtualKeyBusy}
+                  onClick={onTriggerVirtualA}
+                >
+                  {virtualKeyBusy ? "Typing…" : "Type A"}
+                </button>
+
+                {virtualKeyNote ? (
+                  <p className="inline-note">{virtualKeyNote}</p>
+                ) : null}
               </div>
             </PreferenceRow>
 

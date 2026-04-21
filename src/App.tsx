@@ -10,6 +10,7 @@ import {
   revealSyntheticInputAccessTarget,
   requestSyntheticInputAccess,
   saveConfig,
+  sendVirtualA,
 } from "./api";
 import { SettingsForm } from "./settings/SettingsForm";
 import type { AppConfig, FrontendState, RuntimeSnapshot } from "./types";
@@ -58,6 +59,8 @@ function App() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [permissionBusy, setPermissionBusy] = useState(false);
   const [permissionNote, setPermissionNote] = useState<string | null>(null);
+  const [virtualKeyBusy, setVirtualKeyBusy] = useState(false);
+  const [virtualKeyNote, setVirtualKeyNote] = useState<string | null>(null);
   const latestDraftRef = useRef<AppConfig | null>(null);
   const localEditGenerationRef = useRef(0);
 
@@ -155,6 +158,27 @@ function App() {
       );
     } finally {
       setPermissionBusy(false);
+    }
+  });
+
+  const triggerVirtualA = useEffectEvent(async () => {
+    setVirtualKeyBusy(true);
+    setVirtualKeyNote(null);
+
+    try {
+      const nextState = await sendVirtualA();
+      applyServerState(nextState, true);
+      setVirtualKeyNote(
+        "A was posted to the currently focused app. Check your text editor now.",
+      );
+    } catch (error) {
+      setVirtualKeyNote(
+        error instanceof Error
+          ? error.message
+          : "The virtual keyboard test could not be completed.",
+      );
+    } finally {
+      setVirtualKeyBusy(false);
     }
   });
 
@@ -336,8 +360,11 @@ function App() {
             saveState={saveState}
             permissionBusy={permissionBusy}
             permissionNote={permissionNote}
+            virtualKeyBusy={virtualKeyBusy}
+            virtualKeyNote={virtualKeyNote}
             onRequestSyntheticInputAccess={requestPermission}
             onRevealSyntheticInputAccessTarget={revealPermissionTarget}
+            onTriggerVirtualA={triggerVirtualA}
             onChange={handleConfigChange}
           />
         </div>

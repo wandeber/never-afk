@@ -261,6 +261,24 @@ impl AppContext {
         Ok(())
     }
 
+    pub fn perform_text_input_now(&self, text: &str, reason: &str) -> Result<(), String> {
+        self.driver.send_text_input(text)?;
+        let last_fake_input_epoch_ms = self.now_epoch_ms();
+
+        // The virtual-keyboard test is still a synthetic event owned by this
+        // app, so we persist the timestamp exactly like the regular engine path.
+        let _ = save_last_fake_input_epoch_ms(&self.app_handle, Some(last_fake_input_epoch_ms));
+
+        self.update_runtime_snapshot(|snapshot| {
+            snapshot.last_fake_input_epoch_ms = Some(last_fake_input_epoch_ms);
+            snapshot.last_error = None;
+            snapshot.detail_label = format!("Typed {text} via {reason}.");
+        });
+        self.refresh_tray();
+
+        Ok(())
+    }
+
     pub fn request_synthetic_input_access(&self) -> Result<(), String> {
         // Requesting access is a side effect owned by the OS. If the prompt
         // does not grant access immediately, we open the exact Accessibility

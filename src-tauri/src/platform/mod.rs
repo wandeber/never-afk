@@ -14,6 +14,9 @@ pub trait PlatformDriver: Send + Sync {
     fn name(&self) -> &'static str;
     fn seconds_since_last_input(&self) -> Result<Duration, String>;
     fn send_keyboard_input(&self, input: &ResolvedKeyboardInput) -> Result<(), String>;
+    fn send_text_input(&self, _text: &str) -> Result<(), String> {
+        Err("This platform does not support synthetic text input.".to_string())
+    }
 }
 
 pub fn create_platform_driver() -> Box<dyn PlatformDriver> {

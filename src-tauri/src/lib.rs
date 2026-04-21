@@ -57,6 +57,12 @@ fn send_test_input(state: State<'_, SharedAppContext>) -> Result<FrontendState, 
 }
 
 #[tauri::command]
+fn send_virtual_a_command(state: State<'_, SharedAppContext>) -> Result<FrontendState, String> {
+    state.perform_text_input_now("A", "virtual keyboard test")?;
+    Ok(state.frontend_state())
+}
+
+#[tauri::command]
 fn request_synthetic_input_access_command(
     state: State<'_, SharedAppContext>,
 ) -> Result<FrontendState, String> {
@@ -137,6 +143,7 @@ pub fn run() {
             resume_engine,
             run_once_now,
             send_test_input,
+            send_virtual_a_command,
             request_synthetic_input_access_command,
             reveal_synthetic_input_access_target_command
         ]);

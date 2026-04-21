@@ -20,6 +20,7 @@ const apiMocks = vi.hoisted(() => ({
   revealSyntheticInputAccessTarget: vi.fn<() => Promise<FrontendState>>(),
   requestSyntheticInputAccess: vi.fn<() => Promise<FrontendState>>(),
   saveConfig: vi.fn<(config: AppConfig) => Promise<FrontendState>>(),
+  sendVirtualA: vi.fn<() => Promise<FrontendState>>(),
 }));
 
 vi.mock("./api", () => ({
@@ -27,6 +28,7 @@ vi.mock("./api", () => ({
   revealSyntheticInputAccessTarget: apiMocks.revealSyntheticInputAccessTarget,
   requestSyntheticInputAccess: apiMocks.requestSyntheticInputAccess,
   saveConfig: apiMocks.saveConfig,
+  sendVirtualA: apiMocks.sendVirtualA,
 }));
 
 const {
@@ -34,6 +36,7 @@ const {
   revealSyntheticInputAccessTarget,
   requestSyntheticInputAccess,
   saveConfig,
+  sendVirtualA,
 } = apiMocks;
 
 function makeRuntimeSnapshot(
@@ -125,6 +128,15 @@ describe("App", () => {
     );
     saveConfig.mockImplementation(async (config) =>
       makeFrontendState(config, { resolvedInputLabel: config.selectedKey }),
+    );
+    sendVirtualA.mockResolvedValue(
+      makeFrontendState(
+        {},
+        {
+          detailLabel: "Typed A via virtual keyboard test.",
+          lastFakeInputEpochMs: 123456789,
+        },
+      ),
     );
   });
 
@@ -249,6 +261,22 @@ describe("App", () => {
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Access Granted" }),
+      ).toBeTruthy(),
+    );
+  }, 10000);
+
+  it("triggers the dedicated virtual keyboard A test", async () => {
+    render(<App />);
+
+    const typeAButton = await screen.findByRole("button", {
+      name: "Type A",
+    });
+    fireEvent.click(typeAButton);
+
+    await waitFor(() => expect(sendVirtualA).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Check your text editor now/i),
       ).toBeTruthy(),
     );
   }, 10000);

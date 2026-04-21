@@ -25,6 +25,10 @@ export function sendTestInput() {
   return invoke<FrontendState>("send_test_input");
 }
 
+export function sendVirtualA() {
+  return invoke<FrontendState>("send_virtual_a_command");
+}
+
 export function requestSyntheticInputAccess() {
   return invoke<FrontendState>("request_synthetic_input_access_command");
 }
