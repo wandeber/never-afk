@@ -1,0 +1,278 @@
+:root {
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+
+  color: #f7f3eb;
+  background:
+    radial-gradient(circle at top right, rgba(226, 140, 72, 0.18), transparent 35%),
+    linear-gradient(180deg, #181312 0%, #100e0d 100%);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app-shell {
+  box-sizing: border-box;
+  min-height: 100vh;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2.25rem 1.25rem 3rem;
+}
+
+.loading-shell {
+  display: flex;
+  align-items: center;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+  gap: 1rem;
+  align-items: end;
+  padding: 2rem;
+  border: 1px solid rgba(247, 243, 235, 0.12);
+  border-radius: 28px;
+  background: linear-gradient(155deg, rgba(45, 34, 30, 0.95), rgba(19, 16, 15, 0.92));
+  box-shadow: 0 32px 70px rgba(0, 0, 0, 0.28);
+}
+
+.eyebrow {
+  margin: 0 0 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.76rem;
+  color: #f0a55d;
+}
+
+.hero h1,
+.panel h2 {
+  margin: 0;
+}
+
+.hero h1 {
+  font-size: clamp(3rem, 8vw, 5rem);
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+}
+
+.summary,
+.panel-summary {
+  color: rgba(247, 243, 235, 0.76);
+}
+
+.summary {
+  max-width: 48rem;
+  margin: 1rem 0 0;
+  font-size: 1.08rem;
+}
+
+.hero-metrics {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.hero-metrics article,
+.panel {
+  padding: 1.2rem;
+  border-radius: 18px;
+  border: 1px solid rgba(247, 243, 235, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(10px);
+}
+
+.hero-metrics span,
+.field span,
+.status-grid dt {
+  display: block;
+  color: rgba(247, 243, 235, 0.58);
+  font-size: 0.88rem;
+}
+
+.hero-metrics strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.5rem;
+}
+
+.layout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.9fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.primary-column,
+.secondary-column {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.panel-highlight {
+  background: linear-gradient(145deg, rgba(53, 39, 34, 0.88), rgba(23, 19, 18, 0.88));
+}
+
+.panel-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 7rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  border: 1px solid transparent;
+}
+
+.pill-neutral {
+  background: rgba(247, 243, 235, 0.08);
+}
+
+.pill-accent {
+  background: rgba(91, 191, 179, 0.14);
+  border-color: rgba(91, 191, 179, 0.32);
+}
+
+.pill-warning {
+  background: rgba(240, 165, 93, 0.16);
+  border-color: rgba(240, 165, 93, 0.34);
+}
+
+.pill-danger {
+  background: rgba(224, 109, 91, 0.16);
+  border-color: rgba(224, 109, 91, 0.32);
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 1.25rem 0 0;
+}
+
+.status-grid dd {
+  margin: 0.2rem 0 0;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.field input,
+.field select,
+.form-actions button,
+.action-grid button {
+  min-height: 2.9rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid rgba(247, 243, 235, 0.12);
+  border-radius: 14px;
+  color: #f7f3eb;
+  background: rgba(13, 11, 10, 0.55);
+}
+
+.field small,
+.constraint-list li {
+  color: rgba(247, 243, 235, 0.66);
+}
+
+.checkbox-field {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.2rem 0;
+}
+
+.checkbox-field input {
+  margin-top: 0.25rem;
+}
+
+.checkbox-field strong {
+  display: block;
+}
+
+.form-actions {
+  margin-top: 1rem;
+}
+
+.form-actions button,
+.action-grid button {
+  background: linear-gradient(180deg, #f0a55d, #d87c2b);
+  color: #16110f;
+  border: none;
+  font-weight: 600;
+}
+
+.action-grid {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.form-actions button:disabled,
+.action-grid button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.constraint-list {
+  margin: 1rem 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.status-banner {
+  margin: 1rem 0 0;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(224, 109, 91, 0.26);
+  background: rgba(224, 109, 91, 0.12);
+  color: #ffd2c9;
+}
+
+@media (max-width: 960px) {
+  .hero,
+  .layout-grid,
+  .form-grid,
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+}
