@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use core_graphics::event::{CGEvent, CGEventTapLocation, CGEventType};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+use objc2_app_kit::NSWorkspace;
 
 use crate::config::{PlatformKind, ResolvedKeyboardInput};
 use crate::platform::PlatformDriver;
@@ -85,6 +86,24 @@ fn event_source() -> Result<CGEventSource, String> {
         .map_err(|_| "Failed to create the CoreGraphics event source.".to_string())
 }
 
+fn frontmost_application_pid() -> Option<i32> {
+    let app = NSWorkspace::sharedWorkspace().frontmostApplication()?;
+    let pid = app.processIdentifier();
+    (pid > 0).then_some(pid)
+}
+
+fn post_event(event: &CGEvent) {
+    // When we know which app currently owns focus, delivering the event
+    // directly to that PID avoids relying entirely on the global session event
+    // stream, which has been flaky in this development setup.
+    if let Some(pid) = frontmost_application_pid() {
+        event.post_to_pid(pid);
+        return;
+    }
+
+    event.post(SYNTHETIC_EVENT_TAP_LOCATION);
+}
+
 fn post_keyboard_event_pair(key_code: u16, unicode_text: Option<&str>) -> Result<(), String> {
     let event_source = event_source()?;
 
@@ -97,11 +116,11 @@ fn post_keyboard_event_pair(key_code: u16, unicode_text: Option<&str>) -> Result
     if let Some(text) = unicode_text {
         key_down.set_string(text);
     }
-    key_down.post(SYNTHETIC_EVENT_TAP_LOCATION);
+    post_event(&key_down);
 
     let key_up = CGEvent::new_keyboard_event(event_source, key_code, false)
         .map_err(|_| "Failed to create the synthetic key up event.".to_string())?;
-    key_up.post(SYNTHETIC_EVENT_TAP_LOCATION);
+    post_event(&key_up);
 
     Ok(())
 }

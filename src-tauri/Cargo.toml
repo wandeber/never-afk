@@ -30,7 +30,8 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 tauri-plugin-autostart = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-graphics = "0.25"
+core-graphics = { version = "0.25", features = ["elcapitan"] }
+objc2-app-kit = { version = "0.3.2", features = ["NSWorkspace", "NSRunningApplication", "libc"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_SystemInformation", "Win32_UI_Input_KeyboardAndMouse"] }
