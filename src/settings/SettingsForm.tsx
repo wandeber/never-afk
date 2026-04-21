@@ -350,7 +350,7 @@ export const SettingsForm = memo(function SettingsForm({
 
             <PreferenceRow
               title="Virtual keyboard test"
-              description="Type a literal capital A into the currently focused app so you can verify delivery end to end in TextEdit or another editor."
+              description="Queue a literal capital A, hide this window, and give you 2 seconds to refocus TextEdit or another editor before the event fires."
             >
               <div className="stacked-control">
                 <button
@@ -359,7 +359,7 @@ export const SettingsForm = memo(function SettingsForm({
                   disabled={virtualKeyBusy}
                   onClick={onTriggerVirtualA}
                 >
-                  {virtualKeyBusy ? "Typing…" : "Type A"}
+                  {virtualKeyBusy ? "Scheduling…" : "Type A In 2s"}
                 </button>
 
                 {virtualKeyNote ? (

@@ -269,14 +269,14 @@ describe("App", () => {
     render(<App />);
 
     const typeAButton = await screen.findByRole("button", {
-      name: "Type A",
+      name: "Type A In 2s",
     });
     fireEvent.click(typeAButton);
 
     await waitFor(() => expect(sendVirtualA).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(
-        screen.getByText(/Check your text editor now/i),
+        screen.getByText(/Focus your text editor immediately/i),
       ).toBeTruthy(),
     );
   }, 10000);

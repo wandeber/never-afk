@@ -169,7 +169,7 @@ function App() {
       const nextState = await sendVirtualA();
       applyServerState(nextState, true);
       setVirtualKeyNote(
-        "A was posted to the currently focused app. Check your text editor now.",
+        "A is queued for 2 seconds from now. Focus your text editor immediately.",
       );
     } catch (error) {
       setVirtualKeyNote(

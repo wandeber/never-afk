@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::process::Command;
+use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -17,6 +18,7 @@ use crate::platform::{
 use crate::tray::TrayHandles;
 
 pub type SharedAppContext = Arc<AppContext>;
+const VIRTUAL_KEYBOARD_TEST_DELAY: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -277,6 +279,40 @@ impl AppContext {
         self.refresh_tray();
 
         Ok(())
+    }
+
+    pub fn schedule_text_input_test(self: &SharedAppContext, text: &str, reason: &str) {
+        let text_to_type = text.to_string();
+        let reason = reason.to_string();
+
+        // Clicking a button inside the settings window naturally steals focus
+        // away from the text editor the user wants to test against. We hide the
+        // window and delay the synthetic key briefly so the user has time to
+        // bring the editor back to the front before the event is posted.
+        let _ = self.hide_settings_window();
+        self.update_runtime_snapshot(|snapshot| {
+            snapshot.last_error = None;
+            snapshot.detail_label = format!(
+                "Virtual keyboard test queued. Focus your editor within {} seconds.",
+                VIRTUAL_KEYBOARD_TEST_DELAY.as_secs()
+            );
+        });
+        self.refresh_tray();
+
+        let context = Arc::clone(self);
+        let _ = thread::Builder::new()
+            .name("never-afk-virtual-keyboard-test".into())
+            .spawn(move || {
+                thread::sleep(VIRTUAL_KEYBOARD_TEST_DELAY);
+
+                if let Err(error) = context.perform_text_input_now(&text_to_type, &reason) {
+                    context.update_runtime_snapshot(|snapshot| {
+                        snapshot.last_error = Some(error.clone());
+                        snapshot.detail_label = error;
+                    });
+                    context.refresh_tray();
+                }
+            });
     }
 
     pub fn request_synthetic_input_access(&self) -> Result<(), String> {

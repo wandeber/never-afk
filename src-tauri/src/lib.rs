@@ -58,7 +58,7 @@ fn send_test_input(state: State<'_, SharedAppContext>) -> Result<FrontendState, 
 
 #[tauri::command]
 fn send_virtual_a_command(state: State<'_, SharedAppContext>) -> Result<FrontendState, String> {
-    state.perform_text_input_now("A", "virtual keyboard test")?;
+    state.inner().clone().schedule_text_input_test("A", "virtual keyboard test");
     Ok(state.frontend_state())
 }
 
