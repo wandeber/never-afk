@@ -10,7 +10,7 @@ use crate::config::{
     save_last_fake_input_epoch_ms, save_persisted_config, AppConfig, PlatformKind,
 };
 use crate::engine::RuntimeSnapshot;
-use crate::platform::PlatformDriver;
+use crate::platform::{synthetic_input_access_granted, PlatformDriver};
 use crate::tray::TrayHandles;
 
 pub type SharedAppContext = Arc<AppContext>;
@@ -53,7 +53,15 @@ impl AppContext {
             .resolved_input(platform_kind)
             .map(|input| input.display_label)
             .unwrap_or_else(|error| format!("Unavailable ({error})"));
-        let last_fake_input_epoch_ms = load_last_fake_input_epoch_ms(&app_handle)?;
+        let last_fake_input_epoch_ms = if synthetic_input_access_granted() {
+            load_last_fake_input_epoch_ms(&app_handle)?
+        } else {
+            // If the app cannot currently synthesize events, keeping an old
+            // "last event" timestamp visible is misleading. We clear the cached
+            // value and wait for the next genuinely successful event instead.
+            let _ = save_last_fake_input_epoch_ms(&app_handle, None);
+            None
+        };
 
         Ok(Arc::new(Self {
             app_handle,

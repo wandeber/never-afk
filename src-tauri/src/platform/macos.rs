@@ -12,10 +12,31 @@ unsafe extern "C" {
         state_id: CGEventSourceStateID,
         event_type: CGEventType,
     ) -> f64;
+    fn CGPreflightPostEventAccess() -> bool;
+    fn CGRequestPostEventAccess() -> bool;
 }
 
 #[derive(Default)]
 pub struct MacosDriver;
+
+fn missing_post_event_access_message() -> String {
+    "never-afk needs Accessibility permission to send synthetic key events. Approve it in System Settings > Privacy & Security > Accessibility, then retry the action.".to_string()
+}
+
+pub fn synthetic_input_access_granted() -> bool {
+    unsafe { CGPreflightPostEventAccess() }
+}
+
+fn request_synthetic_input_access_if_needed() -> bool {
+    if synthetic_input_access_granted() {
+        return true;
+    }
+
+    // Requesting access lets macOS show the system prompt from the app process
+    // instead of failing silently the first time the engine tries to act.
+    let _ = unsafe { CGRequestPostEventAccess() };
+    synthetic_input_access_granted()
+}
 
 impl PlatformDriver for MacosDriver {
     fn kind(&self) -> PlatformKind {
@@ -41,6 +62,10 @@ impl PlatformDriver for MacosDriver {
         let key_code = input
             .macos_key_code
             .ok_or_else(|| "The current input does not include a macOS key code.".to_string())?;
+
+        if !request_synthetic_input_access_if_needed() {
+            return Err(missing_post_event_access_message());
+        }
 
         let event_source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
             .map_err(|_| "Failed to create the CoreGraphics event source.".to_string())?;

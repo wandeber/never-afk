@@ -30,3 +30,13 @@ pub fn create_platform_driver() -> Box<dyn PlatformDriver> {
     #[allow(unreachable_code)]
     Box::new(unsupported::UnsupportedDriver)
 }
+
+pub fn synthetic_input_access_granted() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return macos::synthetic_input_access_granted();
+    }
+
+    #[allow(unreachable_code)]
+    true
+}
