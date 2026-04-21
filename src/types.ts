@@ -64,6 +64,7 @@ export type SyntheticInputAccessState = {
   supported: boolean;
   granted: boolean;
   canRequest: boolean;
+  targetPath: string | null;
 };
 
 export type FrontendState = {

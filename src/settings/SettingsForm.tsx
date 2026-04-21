@@ -20,6 +20,7 @@ type SettingsFormProps = {
   permissionBusy: boolean;
   permissionNote: string | null;
   onRequestSyntheticInputAccess: () => void;
+  onRevealSyntheticInputAccessTarget: () => void;
   onChange: (nextConfig: AppConfig) => void;
 };
 
@@ -94,6 +95,7 @@ export function SettingsForm({
   permissionBusy,
   permissionNote,
   onRequestSyntheticInputAccess,
+  onRevealSyntheticInputAccessTarget,
   onChange,
 }: SettingsFormProps) {
   const supportedPresetKeysLabel = safeKeyOptions
@@ -309,25 +311,45 @@ export function SettingsForm({
 
             <PreferenceRow
               title="Request permission"
-              description="Ask macOS to show the system prompt for never-afk."
+              description="Ask macOS for accessibility access and open the correct Settings page if approval is still needed."
             >
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={
-                  permissionBusy ||
-                  !syntheticInputAccess.canRequest ||
-                  syntheticInputAccess.granted
-                }
-                onClick={onRequestSyntheticInputAccess}
-              >
-                {syntheticInputAccess.granted
-                  ? "Access Granted"
-                  : permissionBusy
-                    ? "Requesting…"
-                    : "Request Access"}
-              </button>
+              <div className="button-cluster">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={
+                    permissionBusy ||
+                    !syntheticInputAccess.canRequest ||
+                    syntheticInputAccess.granted
+                  }
+                  onClick={onRequestSyntheticInputAccess}
+                >
+                  {syntheticInputAccess.granted
+                    ? "Access Granted"
+                    : permissionBusy
+                      ? "Opening…"
+                      : "Request Access"}
+                </button>
+
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={permissionBusy || !syntheticInputAccess.targetPath}
+                  onClick={onRevealSyntheticInputAccessTarget}
+                >
+                  Reveal Binary
+                </button>
+              </div>
             </PreferenceRow>
+
+            {syntheticInputAccess.targetPath ? (
+              <PreferenceRow
+                title="Current executable"
+                description="This exact binary is the one macOS must allow while the app runs in tauri dev."
+              >
+                <code className="path-chip">{syntheticInputAccess.targetPath}</code>
+              </PreferenceRow>
+            ) : null}
           </div>
 
           <div className="preferences-group-footer">

@@ -59,9 +59,17 @@ fn send_test_input(state: State<'_, SharedAppContext>) -> Result<FrontendState, 
 #[tauri::command]
 fn request_synthetic_input_access_command(
     state: State<'_, SharedAppContext>,
-) -> FrontendState {
-    state.request_synthetic_input_access();
-    state.frontend_state()
+) -> Result<FrontendState, String> {
+    state.request_synthetic_input_access()?;
+    Ok(state.frontend_state())
+}
+
+#[tauri::command]
+fn reveal_synthetic_input_access_target_command(
+    state: State<'_, SharedAppContext>,
+) -> Result<FrontendState, String> {
+    state.reveal_synthetic_input_access_target()?;
+    Ok(state.frontend_state())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -129,7 +137,8 @@ pub fn run() {
             resume_engine,
             run_once_now,
             send_test_input,
-            request_synthetic_input_access_command
+            request_synthetic_input_access_command,
+            reveal_synthetic_input_access_target_command
         ]);
 
     builder

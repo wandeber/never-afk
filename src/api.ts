@@ -28,3 +28,7 @@ export function sendTestInput() {
 export function requestSyntheticInputAccess() {
   return invoke<FrontendState>("request_synthetic_input_access_command");
 }
+
+export function revealSyntheticInputAccessTarget() {
+  return invoke<FrontendState>("reveal_synthetic_input_access_target_command");
+}

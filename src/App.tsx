@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   getFrontendState,
+  revealSyntheticInputAccessTarget,
   requestSyntheticInputAccess,
   saveConfig,
 } from "./api";
@@ -120,13 +121,34 @@ function App() {
       setPermissionNote(
         nextState.syntheticInputAccess.granted
           ? "Accessibility access is enabled. Retry the test in your text editor."
-          : "macOS still shows synthetic input as blocked. Approve never-afk in System Settings > Privacy & Security > Accessibility, then retry.",
+          : "System Settings should now be open. If approval is still missing, add the exact binary shown below and retry.",
       );
     } catch (error) {
       setPermissionNote(
         error instanceof Error
           ? error.message
           : "The permission request could not be completed.",
+      );
+    } finally {
+      setPermissionBusy(false);
+    }
+  });
+
+  const revealPermissionTarget = useEffectEvent(async () => {
+    setPermissionBusy(true);
+    setPermissionNote(null);
+
+    try {
+      const nextState = await revealSyntheticInputAccessTarget();
+      applyServerState(nextState, true);
+      setPermissionNote(
+        "Finder is revealing the exact binary that macOS must authorize in Accessibility.",
+      );
+    } catch (error) {
+      setPermissionNote(
+        error instanceof Error
+          ? error.message
+          : "The current executable could not be revealed in Finder.",
       );
     } finally {
       setPermissionBusy(false);
@@ -244,6 +266,9 @@ function App() {
             permissionNote={permissionNote}
             onRequestSyntheticInputAccess={() => {
               void requestPermission();
+            }}
+            onRevealSyntheticInputAccessTarget={() => {
+              void revealPermissionTarget();
             }}
             onChange={(nextConfig) => {
               localEditGenerationRef.current += 1;

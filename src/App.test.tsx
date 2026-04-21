@@ -17,17 +17,24 @@ import type {
 
 const apiMocks = vi.hoisted(() => ({
   getFrontendState: vi.fn<() => Promise<FrontendState>>(),
+  revealSyntheticInputAccessTarget: vi.fn<() => Promise<FrontendState>>(),
   requestSyntheticInputAccess: vi.fn<() => Promise<FrontendState>>(),
   saveConfig: vi.fn<(config: AppConfig) => Promise<FrontendState>>(),
 }));
 
 vi.mock("./api", () => ({
   getFrontendState: apiMocks.getFrontendState,
+  revealSyntheticInputAccessTarget: apiMocks.revealSyntheticInputAccessTarget,
   requestSyntheticInputAccess: apiMocks.requestSyntheticInputAccess,
   saveConfig: apiMocks.saveConfig,
 }));
 
-const { getFrontendState, requestSyntheticInputAccess, saveConfig } = apiMocks;
+const {
+  getFrontendState,
+  revealSyntheticInputAccessTarget,
+  requestSyntheticInputAccess,
+  saveConfig,
+} = apiMocks;
 
 function makeRuntimeSnapshot(
   overrides: Partial<RuntimeSnapshot> = {},
@@ -92,6 +99,7 @@ function makeFrontendState(
       supported: true,
       granted: false,
       canRequest: true,
+      targetPath: "/Users/wandeber/Projects/Personal/never-afk/src-tauri/target/debug/never-afk",
       ...accessOverrides,
     },
   };
@@ -111,6 +119,7 @@ describe("App", () => {
     ).IS_REACT_ACT_ENVIRONMENT = true;
 
     getFrontendState.mockResolvedValue(makeFrontendState());
+    revealSyntheticInputAccessTarget.mockResolvedValue(makeFrontendState());
     requestSyntheticInputAccess.mockResolvedValue(
       makeFrontendState({}, {}, { granted: true }),
     );
@@ -162,10 +171,10 @@ describe("App", () => {
   it("requests macOS accessibility access from the permissions section", async () => {
     render(<App />);
 
-    const requestButton = await screen.findByRole("button", {
+    const requestButtons = await screen.findAllByRole("button", {
       name: "Request Access",
     });
-    fireEvent.click(requestButton);
+    fireEvent.click(requestButtons[0]!);
 
     await waitFor(() =>
       expect(requestSyntheticInputAccess).toHaveBeenCalledTimes(1),
@@ -174,6 +183,19 @@ describe("App", () => {
       expect(
         screen.getByRole("button", { name: "Access Granted" }),
       ).toBeTruthy(),
+    );
+  }, 10000);
+
+  it("reveals the current dev binary from the permissions section", async () => {
+    render(<App />);
+
+    const revealButtons = await screen.findAllByRole("button", {
+      name: "Reveal Binary",
+    });
+    fireEvent.click(revealButtons[0]!);
+
+    await waitFor(() =>
+      expect(revealSyntheticInputAccessTarget).toHaveBeenCalledTimes(1),
     );
   }, 10000);
 });

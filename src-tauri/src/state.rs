@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, RwLock};
+use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -34,6 +35,7 @@ pub struct SyntheticInputAccessState {
     pub supported: bool,
     pub granted: bool,
     pub can_request: bool,
+    pub target_path: Option<String>,
 }
 
 pub struct AppContext {
@@ -122,6 +124,7 @@ impl AppContext {
                 supported: synthetic_input_access_request_supported(),
                 granted: synthetic_input_access_granted(),
                 can_request: synthetic_input_access_request_supported(),
+                target_path: Self::synthetic_input_access_target_path(),
             },
         }
     }
@@ -258,10 +261,65 @@ impl AppContext {
         Ok(())
     }
 
-    pub fn request_synthetic_input_access(&self) {
-        // Requesting access is a side effect owned by the OS. We simply trigger
-        // it here so the frontend can refresh its status immediately afterwards.
-        let _ = crate::platform::request_synthetic_input_access();
+    pub fn request_synthetic_input_access(&self) -> Result<(), String> {
+        // Requesting access is a side effect owned by the OS. If the prompt
+        // does not grant access immediately, we open the exact Accessibility
+        // pane so the user lands in the right place instead of having to hunt
+        // through System Settings manually.
+        let granted = crate::platform::request_synthetic_input_access();
+        if !granted && synthetic_input_access_request_supported() {
+            self.open_synthetic_input_access_settings()?;
+        }
+
+        Ok(())
+    }
+
+    pub fn open_synthetic_input_access_settings(&self) -> Result<(), String> {
+        #[cfg(target_os = "macos")]
+        {
+            let status = Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+                .status()
+                .map_err(|error| format!("Failed to open macOS Accessibility settings: {error}"))?;
+
+            if status.success() {
+                return Ok(());
+            }
+
+            return Err("macOS Accessibility settings could not be opened.".to_string());
+        }
+
+        #[allow(unreachable_code)]
+        Err("Opening Accessibility settings is only supported on macOS.".to_string())
+    }
+
+    pub fn reveal_synthetic_input_access_target(&self) -> Result<(), String> {
+        #[cfg(target_os = "macos")]
+        {
+            let executable_path = Self::synthetic_input_access_target_path()
+                .ok_or_else(|| "The current executable path is not available.".to_string())?;
+
+            let status = Command::new("open")
+                .arg("-R")
+                .arg(&executable_path)
+                .status()
+                .map_err(|error| format!("Failed to reveal the current executable in Finder: {error}"))?;
+
+            if status.success() {
+                return Ok(());
+            }
+
+            return Err("Finder could not reveal the current executable.".to_string());
+        }
+
+        #[allow(unreachable_code)]
+        Err("Revealing the current executable is only supported on macOS.".to_string())
+    }
+
+    fn synthetic_input_access_target_path() -> Option<String> {
+        std::env::current_exe()
+            .ok()
+            .map(|path| path.display().to_string())
     }
 
     pub fn open_settings_window(&self) -> Result<(), String> {

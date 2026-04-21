@@ -311,6 +311,27 @@ button {
   background: rgba(255, 255, 255, 0.66);
 }
 
+.button-cluster {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.path-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid rgba(42, 47, 58, 0.08);
+  background: rgba(255, 255, 255, 0.68);
+  color: #2b3139;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
 .permission-note {
   margin: 0;
   color: #68707c;
