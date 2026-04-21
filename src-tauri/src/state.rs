@@ -40,7 +40,12 @@ pub struct AppContext {
 impl AppContext {
     pub fn bootstrap(app_handle: AppHandle<Wry>, driver: Box<dyn PlatformDriver>) -> Result<SharedAppContext, String> {
         let platform_kind = driver.kind();
-        let config = load_persisted_config(&app_handle, platform_kind)?;
+        let mut config = load_persisted_config(&app_handle, platform_kind)?;
+        let autostart_enabled = current_autostart_state(&app_handle)?;
+        if config.start_at_login != autostart_enabled {
+            config.start_at_login = autostart_enabled;
+            save_persisted_config(&app_handle, &config)?;
+        }
         sync_autostart(&app_handle, config.start_at_login)?;
 
         let resolved_input_label = config
@@ -266,4 +271,19 @@ fn sync_autostart(app_handle: &AppHandle<Wry>, enabled: bool) -> Result<(), Stri
     }
 
     Ok(())
+}
+
+fn current_autostart_state(app_handle: &AppHandle<Wry>) -> Result<bool, String> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        use tauri_plugin_autostart::ManagerExt;
+
+        return app_handle
+            .autolaunch()
+            .is_enabled()
+            .map_err(|error| format!("Failed to read autostart state: {error}"));
+    }
+
+    #[allow(unreachable_code)]
+    Ok(false)
 }
