@@ -16,6 +16,11 @@ unsafe extern "C" {
     fn CGRequestPostEventAccess() -> bool;
 }
 
+#[link(name = "ApplicationServices", kind = "framework")]
+unsafe extern "C" {
+    fn AXIsProcessTrusted() -> bool;
+}
+
 #[derive(Default)]
 pub struct MacosDriver;
 
@@ -23,8 +28,36 @@ fn missing_post_event_access_message() -> String {
     "never-afk needs Accessibility permission to send synthetic key events. Approve it in System Settings > Privacy & Security > Accessibility, then retry the action.".to_string()
 }
 
-pub fn synthetic_input_access_granted() -> bool {
+fn post_event_access_granted() -> bool {
     unsafe { CGPreflightPostEventAccess() }
+}
+
+fn accessibility_trust_granted() -> bool {
+    unsafe { AXIsProcessTrusted() }
+}
+
+fn effective_synthetic_input_access_granted(
+    post_event_access: bool,
+    accessibility_trust: bool,
+) -> bool {
+    post_event_access || accessibility_trust
+}
+
+pub fn synthetic_input_access_granted() -> bool {
+    // macOS exposes two related trust signals here:
+    //
+    // - `CGPreflightPostEventAccess()` reports the Quartz "post events" grant.
+    // - `AXIsProcessTrusted()` reports classic Accessibility trust.
+    //
+    // In practice, especially while developing with `tauri dev` or after the
+    // user manually approves the app from System Settings, we can end up with
+    // the second signal enabled while the first one still reads as false for
+    // the current process. Treating either one as sufficient avoids trapping
+    // the app in a false-negative "permission required" state.
+    effective_synthetic_input_access_granted(
+        post_event_access_granted(),
+        accessibility_trust_granted(),
+    )
 }
 
 pub fn request_synthetic_input_access() -> bool {
@@ -32,9 +65,15 @@ pub fn request_synthetic_input_access() -> bool {
         return true;
     }
 
-    // Requesting access lets macOS show the system prompt from the app process
-    // instead of failing silently the first time the engine tries to act.
-    let _ = unsafe { CGRequestPostEventAccess() };
+    // Requesting post-event access lets macOS show the native prompt owned by
+    // the current app process instead of failing silently the first time the
+    // engine tries to synthesize input. We still re-check the broader
+    // Accessibility trust afterwards because some approval flows surface there
+    // first when the user adds the app manually from System Settings.
+    if !post_event_access_granted() {
+        let _ = unsafe { CGRequestPostEventAccess() };
+    }
+
     synthetic_input_access_granted()
 }
 
@@ -81,5 +120,25 @@ impl PlatformDriver for MacosDriver {
         key_up.post(CGEventTapLocation::HID);
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::effective_synthetic_input_access_granted;
+
+    #[test]
+    fn grants_access_when_post_event_permission_is_available() {
+        assert!(effective_synthetic_input_access_granted(true, false));
+    }
+
+    #[test]
+    fn grants_access_when_accessibility_trust_is_available() {
+        assert!(effective_synthetic_input_access_granted(false, true));
+    }
+
+    #[test]
+    fn denies_access_when_no_signal_is_granted() {
+        assert!(!effective_synthetic_input_access_granted(false, false));
     }
 }

@@ -230,8 +230,7 @@ describe("App", () => {
           previousVisibilityState,
         );
       } else {
-        delete (document as Document & { visibilityState?: string })
-          .visibilityState;
+        Reflect.deleteProperty(document, "visibilityState");
       }
     }
   }, 10000);
