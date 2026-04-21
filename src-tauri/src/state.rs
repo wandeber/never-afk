@@ -6,7 +6,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, Wry};
 
 use crate::config::{
-    load_persisted_config, safe_key_options, save_persisted_config, AppConfig, PlatformKind,
+    load_last_fake_input_epoch_ms, load_persisted_config, safe_key_options,
+    save_last_fake_input_epoch_ms, save_persisted_config, AppConfig, PlatformKind,
 };
 use crate::engine::RuntimeSnapshot;
 use crate::platform::PlatformDriver;
@@ -52,13 +53,17 @@ impl AppContext {
             .resolved_input(platform_kind)
             .map(|input| input.display_label)
             .unwrap_or_else(|error| format!("Unavailable ({error})"));
+        let last_fake_input_epoch_ms = load_last_fake_input_epoch_ms(&app_handle)?;
 
         Ok(Arc::new(Self {
             app_handle,
             driver,
             config: RwLock::new(config),
             config_generation: AtomicU64::new(0),
-            runtime_snapshot: Mutex::new(RuntimeSnapshot::bootstrap(resolved_input_label)),
+            runtime_snapshot: Mutex::new(RuntimeSnapshot::bootstrap(
+                resolved_input_label,
+                last_fake_input_epoch_ms,
+            )),
             pause_until_epoch_ms: Mutex::new(None),
             wake_signal: Arc::new((Mutex::new(0), Condvar::new())),
             manual_run_requested: AtomicBool::new(false),
@@ -210,11 +215,16 @@ impl AppContext {
             .resolved_input(self.platform_kind())?;
 
         self.driver.send_keyboard_input(&input)?;
+        let last_fake_input_epoch_ms = self.now_epoch_ms();
+
+        // Losing the persisted timestamp would be annoying, but it should never
+        // make a successful synthetic input look like a failed engine action.
+        let _ = save_last_fake_input_epoch_ms(&self.app_handle, Some(last_fake_input_epoch_ms));
 
         // We keep the last successful synthetic event visible in the runtime snapshot so the
         // user can confirm that manual tests and scheduled pulses are actually firing.
         self.update_runtime_snapshot(|snapshot| {
-            snapshot.last_fake_input_epoch_ms = Some(self.now_epoch_ms());
+            snapshot.last_fake_input_epoch_ms = Some(last_fake_input_epoch_ms);
             snapshot.last_error = None;
             snapshot.resolved_input_label = input.display_label.clone();
             snapshot.detail_label = format!("Sent {} via {}.", input.display_label, reason);

@@ -33,7 +33,10 @@ pub struct RuntimeSnapshot {
 }
 
 impl RuntimeSnapshot {
-    pub fn bootstrap(resolved_input_label: String) -> Self {
+    pub fn bootstrap(
+        resolved_input_label: String,
+        last_fake_input_epoch_ms: Option<u64>,
+    ) -> Self {
         Self {
             phase: EnginePhase::WaitingQuiet,
             status_label: "Bootstrapping".into(),
@@ -41,7 +44,7 @@ impl RuntimeSnapshot {
             resolved_input_label,
             next_check_in_seconds: None,
             paused_until_epoch_ms: None,
-            last_fake_input_epoch_ms: None,
+            last_fake_input_epoch_ms,
             last_error: None,
         }
     }
