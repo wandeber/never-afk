@@ -6,13 +6,8 @@ import {
 } from "react";
 import {
   getFrontendState,
-  pauseForMinutes,
-  resumeEngine,
-  runOnceNow,
   saveConfig,
-  sendTestInput,
 } from "./api";
-import { QuickActions } from "./controls/QuickActions";
 import {
   settingsSections,
   SettingsForm,
@@ -206,15 +201,6 @@ function App() {
             </nav>
 
             <StatusPanel runtime={serverState.runtime} />
-            <QuickActions
-              runtime={serverState.runtime}
-              busy={busy}
-              onPause30={() => runAction(() => pauseForMinutes(30))}
-              onPause60={() => runAction(() => pauseForMinutes(60))}
-              onResume={() => runAction(() => resumeEngine())}
-              onRunOnce={() => runAction(() => runOnceNow())}
-              onTestInput={() => runAction(() => sendTestInput())}
-            />
 
             <section className="sidebar-panel privacy-note">
               <p className="eyebrow">Privacy</p>
