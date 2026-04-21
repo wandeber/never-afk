@@ -202,7 +202,7 @@ export function SettingsForm({
         <div className="preferences-list">
           <PreferenceRow
             title="Preset key"
-            description={`Built-in presets available here: ${supportedPresetKeysLabel}. Modifier presets use canonical left-side key codes.`}
+            description={`Built-in presets available here: ${supportedPresetKeysLabel}. Modifier presets use canonical left-side key codes, while letter presets use the standard key for that character.`}
           >
             <select
               className="preference-input"

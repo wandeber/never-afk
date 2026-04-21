@@ -41,6 +41,8 @@ pub enum ActivityMethod {
 pub enum SafeKeyPreset {
     #[serde(rename = "Fn")]
     Fn,
+    #[serde(rename = "A")]
+    A,
     #[serde(rename = "Shift")]
     Shift,
     #[serde(rename = "Option")]
@@ -72,8 +74,9 @@ pub enum SafeKeyPreset {
 }
 
 impl SafeKeyPreset {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::Fn,
+        Self::A,
         Self::Shift,
         Self::OptionKey,
         Self::F13,
@@ -93,6 +96,7 @@ impl SafeKeyPreset {
     pub fn label(self) -> &'static str {
         match self {
             Self::Fn => "Fn",
+            Self::A => "A",
             Self::Shift => "Shift",
             Self::OptionKey => "Option / Alt",
             Self::F13 => "F13",
@@ -126,6 +130,9 @@ impl SafeKeyPreset {
     pub fn macos_key_code(self) -> Option<u16> {
         match self {
             Self::Fn => Some(0x3F),
+            // Letter presets use the standard physical key for that character so the
+            // generated event matches what the focused app would normally receive.
+            Self::A => Some(0x00),
             // Modifier presets use the left-side virtual key codes so there is one
             // canonical built-in preset per modifier without introducing left/right
             // variants into the basic settings UI.
@@ -146,6 +153,7 @@ impl SafeKeyPreset {
     pub fn windows_virtual_key(self) -> Option<u16> {
         match self {
             Self::Fn => None,
+            Self::A => Some(0x41),
             Self::Shift => Some(0x10),
             Self::OptionKey => Some(0x12),
             Self::F13 => Some(0x7C),
@@ -423,6 +431,21 @@ mod tests {
         assert_eq!(resolved.display_label, "Fn");
         assert_eq!(resolved.macos_key_code, Some(0x3F));
         assert_eq!(resolved.windows_virtual_key_code, None);
+    }
+
+    #[test]
+    fn resolves_a_on_both_platforms() {
+        let config = AppConfig {
+            selected_key: SafeKeyPreset::A,
+            ..AppConfig::default()
+        };
+
+        let mac = config.resolved_input(PlatformKind::Macos).unwrap();
+        let windows = config.resolved_input(PlatformKind::Windows).unwrap();
+
+        assert_eq!(mac.display_label, "A");
+        assert_eq!(mac.macos_key_code, Some(0x00));
+        assert_eq!(windows.windows_virtual_key_code, Some(0x41));
     }
 
     #[test]

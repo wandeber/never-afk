@@ -65,6 +65,7 @@ function makeFrontendState(
     }),
     safeKeyOptions: [
       { id: "Fn", label: "Fn", supported: true },
+      { id: "A", label: "A", supported: true },
       { id: "Shift", label: "Shift", supported: true },
       { id: "Option", label: "Option / Alt", supported: true },
       { id: "F13", label: "F13", supported: true },
@@ -97,8 +98,8 @@ describe("App", () => {
     const presetKeySelect = await screen.findByRole("combobox");
     expect((presetKeySelect as HTMLSelectElement).value).toBe("F15");
 
-    fireEvent.change(presetKeySelect, { target: { value: "Shift" } });
-    expect((presetKeySelect as HTMLSelectElement).value).toBe("Shift");
+    fireEvent.change(presetKeySelect, { target: { value: "A" } });
+    expect((presetKeySelect as HTMLSelectElement).value).toBe("A");
 
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 350));
@@ -106,16 +107,16 @@ describe("App", () => {
 
     await waitFor(() =>
       expect(saveConfig).toHaveBeenCalledWith(
-        expect.objectContaining({ selectedKey: "Shift" }),
+        expect.objectContaining({ selectedKey: "A" }),
       ),
     );
 
     await waitFor(() =>
       expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe(
-        "Shift",
+        "A",
       ),
     );
-    expect(screen.getByText(/Current key/i).textContent).toContain("Shift");
+    expect(screen.getByText(/Current key/i).textContent).toContain("A");
   }, 10000);
 
   it("does not poll runtime updates while the settings window is active", async () => {
