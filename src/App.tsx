@@ -1,8 +1,16 @@
-import { startTransition, useEffect, useEffectEvent, useState } from "react";
+import {
+  startTransition,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 import { getFrontendState, saveConfig } from "./api";
 import { SettingsForm } from "./settings/SettingsForm";
 import type { AppConfig, FrontendState, RuntimeSnapshot } from "./types";
 import "./App.css";
+
+type SaveState = "idle" | "saving" | "saved";
 
 function formatPhaseLabel(phase: FrontendState["runtime"]["phase"]) {
   switch (phase) {
@@ -31,16 +39,26 @@ function formatRuntimeNote(runtime: RuntimeSnapshot) {
   return `Next check in ${runtime.nextCheckInSeconds}s`;
 }
 
+function serializeConfig(config: AppConfig) {
+  return JSON.stringify(config);
+}
+
 function App() {
   const [serverState, setServerState] = useState<FrontendState | null>(null);
   const [draftConfig, setDraftConfig] = useState<AppConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const latestDraftRef = useRef<AppConfig | null>(null);
 
   const dirty =
     !!serverState &&
     !!draftConfig &&
-    JSON.stringify(serverState.config) !== JSON.stringify(draftConfig);
+    serializeConfig(serverState.config) !== serializeConfig(draftConfig);
+
+  useEffect(() => {
+    latestDraftRef.current = draftConfig;
+  }, [draftConfig]);
 
   const applyServerState = useEffectEvent(
     (nextState: FrontendState, preserveDraft: boolean) => {
@@ -60,6 +78,33 @@ function App() {
   const loadInitialState = useEffectEvent(async () => {
     const nextState = await getFrontendState();
     applyServerState(nextState, false);
+  });
+
+  const persistDraft = useEffectEvent(async (configToSave: AppConfig) => {
+    const submittedDraft = serializeConfig(configToSave);
+
+    setBusy(true);
+    setSaveError(null);
+    setSaveState("saving");
+
+    try {
+      const nextState = await saveConfig(configToSave);
+      const latestDraft = latestDraftRef.current;
+      const hasNewerDraft =
+        !!latestDraft && serializeConfig(latestDraft) !== submittedDraft;
+
+      // If the user changed something else while the request was in flight, we
+      // keep their newer draft on screen and let the next autosave cycle persist it.
+      applyServerState(nextState, hasNewerDraft);
+      setSaveState("saved");
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "The requested action failed.",
+      );
+      setSaveState("idle");
+    } finally {
+      setBusy(false);
+    }
   });
 
   useEffect(() => {
@@ -87,14 +132,14 @@ function App() {
   }, [loadInitialState]);
 
   useEffect(() => {
-    if (!serverState) {
+    if (!serverState || dirty || busy) {
       return undefined;
     }
 
     let cancelled = false;
 
-    // Runtime polling intentionally updates only the server snapshot so in-progress
-    // edits inside the form are never blown away by background status refreshes.
+    // Polling is paused while the user has unsaved edits so the form does not
+    // visually fight with the runtime refresh loop during interaction.
     const intervalId = window.setInterval(() => {
       void (async () => {
         try {
@@ -113,27 +158,21 @@ function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [applyServerState, serverState]);
+  }, [applyServerState, busy, dirty, serverState]);
 
-  async function handleSave() {
-    if (!draftConfig) {
-      return;
+  useEffect(() => {
+    if (!draftConfig || !dirty || busy) {
+      return undefined;
     }
 
-    setBusy(true);
-    setSaveError(null);
+    const timeoutId = window.setTimeout(() => {
+      void persistDraft(draftConfig);
+    }, 250);
 
-    try {
-      const nextState = await saveConfig(draftConfig);
-      applyServerState(nextState, dirty);
-    } catch (error) {
-      setSaveError(
-        error instanceof Error ? error.message : "The requested action failed.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [busy, dirty, draftConfig, persistDraft]);
 
   if (!serverState || !draftConfig) {
     return (
@@ -185,11 +224,12 @@ function App() {
             busy={busy}
             dirty={dirty}
             saveError={saveError}
+            saveState={saveState}
             onChange={(nextConfig) => {
               setSaveError(null);
+              setSaveState("idle");
               setDraftConfig(nextConfig);
             }}
-            onSave={handleSave}
           />
         </div>
 

@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { AppConfig, SafeKeyPreset, SafeKeyOption } from "../types";
 
+type SaveState = "idle" | "saving" | "saved";
+
 type SettingsFormProps = {
   config: AppConfig;
   customInputLabel: string;
@@ -8,8 +10,8 @@ type SettingsFormProps = {
   busy: boolean;
   dirty: boolean;
   saveError: string | null;
+  saveState: SaveState;
   onChange: (nextConfig: AppConfig) => void;
-  onSave: () => Promise<void>;
 };
 
 type PreferenceRowProps = {
@@ -46,6 +48,31 @@ function PreferenceRow({
   );
 }
 
+function saveStateLabel(
+  saveState: SaveState,
+  dirty: boolean,
+  busy: boolean,
+  saveError: string | null,
+) {
+  if (saveError) {
+    return null;
+  }
+
+  if (busy || saveState === "saving") {
+    return "Applying changes…";
+  }
+
+  if (dirty) {
+    return "Applying changes soon…";
+  }
+
+  if (saveState === "saved") {
+    return "Changes applied automatically.";
+  }
+
+  return "Changes apply automatically.";
+}
+
 export function SettingsForm({
   config,
   customInputLabel,
@@ -53,8 +80,8 @@ export function SettingsForm({
   busy,
   dirty,
   saveError,
+  saveState,
   onChange,
-  onSave,
 }: SettingsFormProps) {
   const supportedPresetKeysLabel = safeKeyOptions
     .filter((option) => option.supported)
@@ -251,14 +278,9 @@ export function SettingsForm({
       ) : null}
 
       <div className="form-actions">
-        <button
-          className="primary-button"
-          type="button"
-          onClick={onSave}
-          disabled={!dirty || busy}
-        >
-          {busy ? "Saving..." : "Save Settings"}
-        </button>
+        <p className="autosave-status">
+          {saveStateLabel(saveState, dirty, busy, saveError)}
+        </p>
       </div>
     </section>
   );

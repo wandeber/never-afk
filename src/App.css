@@ -224,8 +224,7 @@ button {
   gap: 0.65rem;
 }
 
-.preference-input,
-.primary-button {
+.preference-input {
   min-height: 2.45rem;
   padding: 0.55rem 0.75rem;
   border: 1px solid rgba(42, 47, 58, 0.12);
@@ -279,29 +278,13 @@ button {
 .form-actions {
   display: flex;
   justify-content: flex-end;
+  min-height: 1.4rem;
 }
 
-.primary-button {
-  font-weight: 600;
-  transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    transform 140ms ease;
-  background: linear-gradient(180deg, #1575ff, #1063db);
-  color: #ffffff;
-  border: 1px solid rgba(16, 99, 219, 0.3);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 1px 1px rgba(16, 99, 219, 0.18);
-}
-
-.primary-button:not(:disabled):hover {
-  transform: translateY(-1px);
-}
-
-.primary-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+.autosave-status {
+  margin: 0;
+  color: #68707c;
+  font-size: 0.84rem;
 }
 
 .footer-strip {
