@@ -1,5 +1,6 @@
+use chrono::{Local, TimeZone};
 use tauri::menu::{CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItem, MenuItemBuilder};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Runtime, Wry};
 
 use crate::engine::{EnginePhase, RuntimeSnapshot};
@@ -7,6 +8,7 @@ use crate::state::SharedAppContext;
 
 const STATUS_ITEM_ID: &str = "status";
 const NEXT_CHECK_ITEM_ID: &str = "next-check";
+const LAST_EVENT_ITEM_ID: &str = "last-event";
 const ENABLED_ITEM_ID: &str = "enabled";
 const OPEN_SETTINGS_ITEM_ID: &str = "open-settings";
 const PAUSE_30_ITEM_ID: &str = "pause-30";
@@ -15,8 +17,10 @@ const RUN_ONCE_ITEM_ID: &str = "run-once";
 const QUIT_ITEM_ID: &str = "quit";
 
 pub struct TrayHandles<R: Runtime> {
+    icon: TrayIcon<R>,
     status: MenuItem<R>,
     next_check: MenuItem<R>,
+    last_event: MenuItem<R>,
     enabled: CheckMenuItem<R>,
 }
 
@@ -30,6 +34,7 @@ impl<R: Runtime> TrayHandles<R> {
             Some(seconds) => format!("Next check in {}s", seconds.max(1)),
             None => "Next check in -".to_string(),
         };
+        let last_event_text = format_last_event_menu_text(snapshot.last_fake_input_epoch_ms);
 
         let status_text = match snapshot.phase {
             EnginePhase::WaitingQuiet => "Status: Enabled".to_string(),
@@ -45,12 +50,43 @@ impl<R: Runtime> TrayHandles<R> {
         self.next_check
             .set_text(next_check_text)
             .map_err(|error| format!("Failed to update tray timing: {error}"))?;
+        self.last_event
+            .set_text(last_event_text)
+            .map_err(|error| format!("Failed to update tray last-event item: {error}"))?;
         self.enabled
             .set_checked(config.enabled)
             .map_err(|error| format!("Failed to update tray enabled state: {error}"))?;
+        self.icon
+            .set_title(format_last_event_title(snapshot.last_fake_input_epoch_ms))
+            .map_err(|error| format!("Failed to update the tray title: {error}"))?;
 
         Ok(())
     }
+}
+
+fn format_last_event_menu_text(last_fake_input_epoch_ms: Option<u64>) -> String {
+    match last_fake_input_epoch_ms.and_then(format_timestamp_for_menu) {
+        Some(label) => format!("Last event: {label}"),
+        None => "Last event: -".to_string(),
+    }
+}
+
+fn format_last_event_title(last_fake_input_epoch_ms: Option<u64>) -> Option<String> {
+    last_fake_input_epoch_ms.and_then(format_timestamp_for_title)
+}
+
+fn format_timestamp_for_menu(epoch_ms: u64) -> Option<String> {
+    // The tray menu can afford a fuller timestamp so the user can confirm the
+    // exact day and minute when the last synthetic event was sent.
+    let timestamp = Local.timestamp_millis_opt(epoch_ms as i64).single()?;
+    Some(timestamp.format("%Y-%m-%d %H:%M").to_string())
+}
+
+fn format_timestamp_for_title(epoch_ms: u64) -> Option<String> {
+    // The visible menu-bar title must stay short enough to avoid stealing too
+    // much horizontal space from the rest of the macOS status items.
+    let timestamp = Local.timestamp_millis_opt(epoch_ms as i64).single()?;
+    Some(timestamp.format("%d/%m %H:%M").to_string())
 }
 
 pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, String> {
@@ -63,6 +99,11 @@ pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, Strin
         .enabled(false)
         .build(app_handle)
         .map_err(|error| format!("Failed to create the tray timing item: {error}"))?;
+
+    let last_event = MenuItemBuilder::with_id(LAST_EVENT_ITEM_ID, "Last event: -")
+        .enabled(false)
+        .build(app_handle)
+        .map_err(|error| format!("Failed to create the tray last-event item: {error}"))?;
 
     let enabled = CheckMenuItemBuilder::with_id(ENABLED_ITEM_ID, "Enabled")
         .checked(true)
@@ -92,6 +133,7 @@ pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, Strin
     let menu = MenuBuilder::new(app_handle)
         .item(&status)
         .item(&next_check)
+        .item(&last_event)
         .separator()
         .item(&enabled)
         .item(&open_settings)
@@ -108,7 +150,7 @@ pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, Strin
         .cloned()
         .ok_or_else(|| "The application icon is not available.".to_string())?;
 
-    TrayIconBuilder::with_id("main")
+    let icon = TrayIconBuilder::with_id("main")
         .icon(icon)
         .tooltip("never-afk")
         .menu(&menu)
@@ -117,8 +159,10 @@ pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, Strin
         .map_err(|error| format!("Failed to build the tray icon: {error}"))?;
 
     Ok(TrayHandles {
+        icon,
         status,
         next_check,
+        last_event,
         enabled,
     })
 }
