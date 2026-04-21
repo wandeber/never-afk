@@ -49,8 +49,8 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [isInteracting, setIsInteracting] = useState(false);
   const latestDraftRef = useRef<AppConfig | null>(null);
+  const localEditGenerationRef = useRef(0);
 
   const dirty =
     !!serverState &&
@@ -75,11 +75,6 @@ function App() {
       });
     },
   );
-
-  const loadInitialState = useEffectEvent(async () => {
-    const nextState = await getFrontendState();
-    applyServerState(nextState, false);
-  });
 
   const persistDraft = useEffectEvent(async (configToSave: AppConfig) => {
     const submittedDraft = serializeConfig(configToSave);
@@ -110,11 +105,24 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
+    const requestEditGeneration = localEditGenerationRef.current;
 
     void (async () => {
       try {
-        if (!cancelled) {
-          await loadInitialState();
+        // Load the first snapshot directly inside this effect so React dev
+        // re-renders cannot accidentally schedule a second initializer that
+        // races with local edits and restores an older persisted config. If the
+        // user changes any setting before this request resolves, we ignore the
+        // stale response instead of overwriting the in-memory draft.
+        const nextState = await getFrontendState();
+        if (
+          !cancelled &&
+          localEditGenerationRef.current === requestEditGeneration
+        ) {
+          startTransition(() => {
+            setServerState(nextState);
+            setDraftConfig(nextState.config);
+          });
         }
       } catch (error) {
         if (!cancelled) {
@@ -130,43 +138,17 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [loadInitialState]);
-
-  useEffect(() => {
-    if (!serverState || dirty || busy || isInteracting) {
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    // Polling is paused while the user is editing or while an autosave request
-    // is in flight. Native selects can otherwise lose their pending choice when
-    // the runtime snapshot refreshes underneath the same form controls.
-    const intervalId = window.setInterval(() => {
-      void (async () => {
-        try {
-          const nextState = await getFrontendState();
-          if (!cancelled) {
-            applyServerState(nextState, true);
-          }
-        } catch {
-          // Poll failures should not interrupt local editing. The last successful
-          // runtime snapshot remains on screen until the next refresh succeeds.
-        }
-      })();
-    }, 1000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [applyServerState, busy, dirty, isInteracting, serverState]);
+  }, []);
 
   useEffect(() => {
     if (!draftConfig || !dirty || busy) {
       return undefined;
     }
 
+    // The settings window behaves like a desktop preferences pane: it renders a
+    // stable snapshot, then updates that snapshot only when the user saves a new
+    // config. Avoiding background polling here prevents native controls from
+    // being reset underneath in-progress edits.
     const timeoutId = window.setTimeout(() => {
       void persistDraft(draftConfig);
     }, 250);
@@ -227,8 +209,8 @@ function App() {
             dirty={dirty}
             saveError={saveError}
             saveState={saveState}
-            onInteractionChange={setIsInteracting}
             onChange={(nextConfig) => {
+              localEditGenerationRef.current += 1;
               setSaveError(null);
               setSaveState("idle");
               setDraftConfig(nextConfig);
