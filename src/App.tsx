@@ -5,7 +5,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { getFrontendState, saveConfig } from "./api";
+import {
+  getFrontendState,
+  requestSyntheticInputAccess,
+  saveConfig,
+} from "./api";
 import { SettingsForm } from "./settings/SettingsForm";
 import type { AppConfig, FrontendState, RuntimeSnapshot } from "./types";
 import "./App.css";
@@ -49,6 +53,8 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [permissionBusy, setPermissionBusy] = useState(false);
+  const [permissionNote, setPermissionNote] = useState<string | null>(null);
   const latestDraftRef = useRef<AppConfig | null>(null);
   const localEditGenerationRef = useRef(0);
 
@@ -100,6 +106,30 @@ function App() {
       setSaveState("idle");
     } finally {
       setBusy(false);
+    }
+  });
+
+  const requestPermission = useEffectEvent(async () => {
+    setPermissionBusy(true);
+    setPermissionNote(null);
+
+    try {
+      const nextState = await requestSyntheticInputAccess();
+      applyServerState(nextState, true);
+
+      setPermissionNote(
+        nextState.syntheticInputAccess.granted
+          ? "Accessibility access is enabled. Retry the test in your text editor."
+          : "macOS still shows synthetic input as blocked. Approve never-afk in System Settings > Privacy & Security > Accessibility, then retry.",
+      );
+    } catch (error) {
+      setPermissionNote(
+        error instanceof Error
+          ? error.message
+          : "The permission request could not be completed.",
+      );
+    } finally {
+      setPermissionBusy(false);
     }
   });
 
@@ -205,10 +235,16 @@ function App() {
             config={draftConfig}
             customInputLabel={serverState.customInputLabel}
             safeKeyOptions={serverState.safeKeyOptions}
+            syntheticInputAccess={serverState.syntheticInputAccess}
             busy={busy}
             dirty={dirty}
             saveError={saveError}
             saveState={saveState}
+            permissionBusy={permissionBusy}
+            permissionNote={permissionNote}
+            onRequestSyntheticInputAccess={() => {
+              void requestPermission();
+            }}
             onChange={(nextConfig) => {
               localEditGenerationRef.current += 1;
               setSaveError(null);

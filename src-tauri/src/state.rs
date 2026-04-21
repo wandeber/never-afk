@@ -10,7 +10,9 @@ use crate::config::{
     save_last_fake_input_epoch_ms, save_persisted_config, AppConfig, PlatformKind,
 };
 use crate::engine::RuntimeSnapshot;
-use crate::platform::{synthetic_input_access_granted, PlatformDriver};
+use crate::platform::{
+    synthetic_input_access_granted, synthetic_input_access_request_supported, PlatformDriver,
+};
 use crate::tray::TrayHandles;
 
 pub type SharedAppContext = Arc<AppContext>;
@@ -23,6 +25,15 @@ pub struct FrontendState {
     pub safe_key_options: Vec<crate::config::SafeKeyOption>,
     pub platform_name: String,
     pub custom_input_label: String,
+    pub synthetic_input_access: SyntheticInputAccessState,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyntheticInputAccessState {
+    pub supported: bool,
+    pub granted: bool,
+    pub can_request: bool,
 }
 
 pub struct AppContext {
@@ -107,6 +118,11 @@ impl AppContext {
             safe_key_options: safe_key_options(self.platform_kind()),
             platform_name: self.platform_name().to_string(),
             custom_input_label: self.platform_kind().custom_input_label().to_string(),
+            synthetic_input_access: SyntheticInputAccessState {
+                supported: synthetic_input_access_request_supported(),
+                granted: synthetic_input_access_granted(),
+                can_request: synthetic_input_access_request_supported(),
+            },
         }
     }
 
@@ -240,6 +256,12 @@ impl AppContext {
         self.refresh_tray();
 
         Ok(())
+    }
+
+    pub fn request_synthetic_input_access(&self) {
+        // Requesting access is a side effect owned by the OS. We simply trigger
+        // it here so the frontend can refresh its status immediately afterwards.
+        let _ = crate::platform::request_synthetic_input_access();
     }
 
     pub fn open_settings_window(&self) -> Result<(), String> {

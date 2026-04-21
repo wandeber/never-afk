@@ -56,6 +56,14 @@ fn send_test_input(state: State<'_, SharedAppContext>) -> Result<FrontendState, 
     Ok(state.frontend_state())
 }
 
+#[tauri::command]
+fn request_synthetic_input_access_command(
+    state: State<'_, SharedAppContext>,
+) -> FrontendState {
+    state.request_synthetic_input_access();
+    state.frontend_state()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -120,7 +128,8 @@ pub fn run() {
             pause_for_minutes,
             resume_engine,
             run_once_now,
-            send_test_input
+            send_test_input,
+            request_synthetic_input_access_command
         ]);
 
     builder

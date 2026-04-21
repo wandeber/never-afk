@@ -1,20 +1,33 @@
 import { act } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import type { AppConfig, FrontendState, RuntimeSnapshot } from "./types";
+import type {
+  AppConfig,
+  FrontendState,
+  RuntimeSnapshot,
+  SyntheticInputAccessState,
+} from "./types";
 
 const apiMocks = vi.hoisted(() => ({
   getFrontendState: vi.fn<() => Promise<FrontendState>>(),
+  requestSyntheticInputAccess: vi.fn<() => Promise<FrontendState>>(),
   saveConfig: vi.fn<(config: AppConfig) => Promise<FrontendState>>(),
 }));
 
 vi.mock("./api", () => ({
   getFrontendState: apiMocks.getFrontendState,
+  requestSyntheticInputAccess: apiMocks.requestSyntheticInputAccess,
   saveConfig: apiMocks.saveConfig,
 }));
 
-const { getFrontendState, saveConfig } = apiMocks;
+const { getFrontendState, requestSyntheticInputAccess, saveConfig } = apiMocks;
 
 function makeRuntimeSnapshot(
   overrides: Partial<RuntimeSnapshot> = {},
@@ -54,6 +67,7 @@ function makeConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 function makeFrontendState(
   configOverrides: Partial<AppConfig> = {},
   runtimeOverrides: Partial<RuntimeSnapshot> = {},
+  accessOverrides: Partial<SyntheticInputAccessState> = {},
 ): FrontendState {
   const config = makeConfig(configOverrides);
 
@@ -74,10 +88,20 @@ function makeFrontendState(
     ],
     platformName: "macOS",
     customInputLabel: "macOS key code",
+    syntheticInputAccess: {
+      supported: true,
+      granted: false,
+      canRequest: true,
+      ...accessOverrides,
+    },
   };
 }
 
 describe("App", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     (
@@ -87,6 +111,9 @@ describe("App", () => {
     ).IS_REACT_ACT_ENVIRONMENT = true;
 
     getFrontendState.mockResolvedValue(makeFrontendState());
+    requestSyntheticInputAccess.mockResolvedValue(
+      makeFrontendState({}, {}, { granted: true }),
+    );
     saveConfig.mockImplementation(async (config) =>
       makeFrontendState(config, { resolvedInputLabel: config.selectedKey }),
     );
@@ -130,5 +157,23 @@ describe("App", () => {
     });
 
     expect(getFrontendState).toHaveBeenCalledTimes(initialRequestCount);
+  }, 10000);
+
+  it("requests macOS accessibility access from the permissions section", async () => {
+    render(<App />);
+
+    const requestButton = await screen.findByRole("button", {
+      name: "Request Access",
+    });
+    fireEvent.click(requestButton);
+
+    await waitFor(() =>
+      expect(requestSyntheticInputAccess).toHaveBeenCalledTimes(1),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Access Granted" }),
+      ).toBeTruthy(),
+    );
   }, 10000);
 });

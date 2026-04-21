@@ -60,10 +60,17 @@ export type SafeKeyOption = {
   supported: boolean;
 };
 
+export type SyntheticInputAccessState = {
+  supported: boolean;
+  granted: boolean;
+  canRequest: boolean;
+};
+
 export type FrontendState = {
   config: AppConfig;
   runtime: RuntimeSnapshot;
   safeKeyOptions: SafeKeyOption[];
   platformName: string;
   customInputLabel: string;
+  syntheticInputAccess: SyntheticInputAccessState;
 };

@@ -40,3 +40,23 @@ pub fn synthetic_input_access_granted() -> bool {
     #[allow(unreachable_code)]
     true
 }
+
+pub fn synthetic_input_access_request_supported() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return true;
+    }
+
+    #[allow(unreachable_code)]
+    false
+}
+
+pub fn request_synthetic_input_access() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return macos::request_synthetic_input_access();
+    }
+
+    #[allow(unreachable_code)]
+    true
+}

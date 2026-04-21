@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
-import type { AppConfig, SafeKeyPreset, SafeKeyOption } from "../types";
+import type {
+  AppConfig,
+  SafeKeyPreset,
+  SafeKeyOption,
+  SyntheticInputAccessState,
+} from "../types";
 
 type SaveState = "idle" | "saving" | "saved";
 
@@ -7,10 +12,14 @@ type SettingsFormProps = {
   config: AppConfig;
   customInputLabel: string;
   safeKeyOptions: SafeKeyOption[];
+  syntheticInputAccess: SyntheticInputAccessState;
   busy: boolean;
   dirty: boolean;
   saveError: string | null;
   saveState: SaveState;
+  permissionBusy: boolean;
+  permissionNote: string | null;
+  onRequestSyntheticInputAccess: () => void;
   onChange: (nextConfig: AppConfig) => void;
 };
 
@@ -77,10 +86,14 @@ export function SettingsForm({
   config,
   customInputLabel,
   safeKeyOptions,
+  syntheticInputAccess,
   busy,
   dirty,
   saveError,
   saveState,
+  permissionBusy,
+  permissionNote,
+  onRequestSyntheticInputAccess,
   onChange,
 }: SettingsFormProps) {
   const supportedPresetKeysLabel = safeKeyOptions
@@ -270,6 +283,63 @@ export function SettingsForm({
           </PreferenceRow>
         </div>
       </section>
+
+      {syntheticInputAccess.supported ? (
+        <section className="preferences-group">
+          <div className="preferences-group-header">
+            <h2>Permissions</h2>
+            <p>macOS needs accessibility access before synthetic keys can reach other apps.</p>
+          </div>
+
+          <div className="preferences-list">
+            <PreferenceRow
+              title="Accessibility access"
+              description="Required for test input and scheduled key presses to be delivered to the focused app."
+            >
+              <span
+                className={`permission-status ${
+                  syntheticInputAccess.granted
+                    ? "permission-status-granted"
+                    : "permission-status-missing"
+                }`}
+              >
+                {syntheticInputAccess.granted ? "Granted" : "Required"}
+              </span>
+            </PreferenceRow>
+
+            <PreferenceRow
+              title="Request permission"
+              description="Ask macOS to show the system prompt for never-afk."
+            >
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={
+                  permissionBusy ||
+                  !syntheticInputAccess.canRequest ||
+                  syntheticInputAccess.granted
+                }
+                onClick={onRequestSyntheticInputAccess}
+              >
+                {syntheticInputAccess.granted
+                  ? "Access Granted"
+                  : permissionBusy
+                    ? "Requesting…"
+                    : "Request Access"}
+              </button>
+            </PreferenceRow>
+          </div>
+
+          <div className="preferences-group-footer">
+            <p className="permission-note">
+              {permissionNote ??
+                (syntheticInputAccess.granted
+                  ? "Accessibility access is enabled. You can retry the text editor test now."
+                  : "After approving access, return here and test the synthetic key again in your editor.")}
+            </p>
+          </div>
+        </section>
+      ) : null}
 
       {saveError ? (
         <p className="status-banner" role="alert">

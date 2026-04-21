@@ -24,3 +24,7 @@ export function runOnceNow() {
 export function sendTestInput() {
   return invoke<FrontendState>("send_test_input");
 }
+
+export function requestSyntheticInputAccess() {
+  return invoke<FrontendState>("request_synthetic_input_access_command");
+}

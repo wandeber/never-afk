@@ -27,7 +27,7 @@ pub fn synthetic_input_access_granted() -> bool {
     unsafe { CGPreflightPostEventAccess() }
 }
 
-fn request_synthetic_input_access_if_needed() -> bool {
+pub fn request_synthetic_input_access() -> bool {
     if synthetic_input_access_granted() {
         return true;
     }
@@ -63,7 +63,7 @@ impl PlatformDriver for MacosDriver {
             .macos_key_code
             .ok_or_else(|| "The current input does not include a macOS key code.".to_string())?;
 
-        if !request_synthetic_input_access_if_needed() {
+        if !request_synthetic_input_access() {
             return Err(missing_post_event_access_message());
         }
 

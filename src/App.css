@@ -192,6 +192,12 @@ button {
   color: #707783;
 }
 
+.preferences-group-footer {
+  padding: 0.8rem 1rem 0.95rem;
+  border-top: 1px solid rgba(40, 44, 53, 0.06);
+  background: rgba(255, 255, 255, 0.36);
+}
+
 .preferences-list {
   display: grid;
 }
@@ -264,6 +270,52 @@ button {
 .preference-unit {
   color: #69707b;
   white-space: nowrap;
+}
+
+.permission-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  min-width: 96px;
+  padding: 0 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(50, 56, 70, 0.08);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.permission-status-granted {
+  background: rgba(96, 181, 167, 0.18);
+  color: #175e55;
+}
+
+.permission-status-missing {
+  background: rgba(241, 178, 106, 0.24);
+  color: #8c541c;
+}
+
+.secondary-button {
+  min-height: 2.45rem;
+  padding: 0.55rem 0.95rem;
+  border: 1px solid rgba(42, 47, 58, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #20252d;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.secondary-button:disabled {
+  cursor: default;
+  color: #7f8692;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.permission-note {
+  margin: 0;
+  color: #68707c;
+  font-size: 0.84rem;
+  line-height: 1.4;
 }
 
 .status-banner {
