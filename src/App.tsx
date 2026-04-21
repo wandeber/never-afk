@@ -45,6 +45,18 @@ function formatRuntimeNote(runtime: RuntimeSnapshot) {
   return `Next check in ${runtime.nextCheckInSeconds}s`;
 }
 
+function formatSyntheticInputAccessLabel(
+  syntheticInputAccess: FrontendState["syntheticInputAccess"],
+) {
+  if (!syntheticInputAccess.supported) {
+    return "Accessibility unsupported";
+  }
+
+  return syntheticInputAccess.granted
+    ? "Accessibility granted"
+    : "Accessibility required";
+}
+
 function serializeConfig(config: AppConfig) {
   return JSON.stringify(config);
 }
@@ -331,6 +343,18 @@ function App() {
           </div>
 
           <div className="toolbar-meta">
+            <span
+              aria-label={formatSyntheticInputAccessLabel(
+                serverState.syntheticInputAccess,
+              )}
+              className={`access-chip ${
+                serverState.syntheticInputAccess.granted
+                  ? "access-chip-granted"
+                  : "access-chip-missing"
+              }`}
+            >
+              {formatSyntheticInputAccessLabel(serverState.syntheticInputAccess)}
+            </span>
             <span
               className={`phase-chip phase-${
                 runtimeSnapshot?.phase ?? "waitingQuiet"

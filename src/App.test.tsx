@@ -143,6 +143,10 @@ describe("App", () => {
   it("keeps the selected key change instead of reverting to F15", async () => {
     render(<App />);
 
+    expect(
+      await screen.findByLabelText("Accessibility required"),
+    ).toBeTruthy();
+
     const presetKeySelect = await screen.findByRole("combobox");
     expect((presetKeySelect as HTMLSelectElement).value).toBe("F15");
 
@@ -232,6 +236,11 @@ describe("App", () => {
         window.dispatchEvent(new Event("focus"));
       });
 
+      await waitFor(() =>
+        expect(
+          screen.getByLabelText("Accessibility granted"),
+        ).toBeTruthy(),
+      );
       await waitFor(() => expect(screen.getByText("Granted")).toBeTruthy());
       expect(getFrontendState).toHaveBeenCalledTimes(2);
     } finally {
