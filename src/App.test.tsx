@@ -155,17 +155,85 @@ describe("App", () => {
     expect(screen.getByText(/Current key/i).textContent).toContain("A");
   }, 10000);
 
-  it("does not poll runtime updates while the settings window is active", async () => {
+  it("polls runtime updates without resetting the current key selection", async () => {
+    getFrontendState.mockReset();
+    getFrontendState
+      .mockResolvedValueOnce(makeFrontendState())
+      .mockResolvedValue(
+        makeFrontendState(
+          { selectedKey: "A" },
+          {
+            nextCheckInSeconds: 45,
+            resolvedInputLabel: "A",
+          },
+        ),
+      );
+
     render(<App />);
 
-    await screen.findByRole("combobox");
-    const initialRequestCount = getFrontendState.mock.calls.length;
+    const presetKeySelect = await screen.findByRole("combobox");
+    fireEvent.change(presetKeySelect, { target: { value: "A" } });
 
     await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 1500));
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
     });
 
-    expect(getFrontendState).toHaveBeenCalledTimes(initialRequestCount);
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+    });
+
+    await waitFor(() =>
+      expect(getFrontendState.mock.calls.length).toBeGreaterThanOrEqual(2),
+    );
+    expect(screen.getByText("Next check in 45s")).toBeTruthy();
+    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("A");
+    expect(screen.getByText(/Current key/i).textContent).toContain("A");
+  }, 10000);
+
+  it("refreshes accessibility access after the window regains focus", async () => {
+    getFrontendState.mockReset();
+    getFrontendState
+      .mockResolvedValueOnce(makeFrontendState())
+      .mockResolvedValueOnce(
+        makeFrontendState({}, {}, { granted: true }),
+      );
+
+    const previousVisibilityState = Object.getOwnPropertyDescriptor(
+      document,
+      "visibilityState",
+    );
+
+    // The refresh-on-return flow is gated on the window being visible, so the
+    // test pins the document state to the same value a foreground Tauri window
+    // reports after the user comes back from System Settings.
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+
+    try {
+      render(<App />);
+
+      await screen.findByText("Required");
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+
+      await waitFor(() => expect(screen.getByText("Granted")).toBeTruthy());
+      expect(getFrontendState).toHaveBeenCalledTimes(2);
+    } finally {
+      if (previousVisibilityState) {
+        Object.defineProperty(
+          document,
+          "visibilityState",
+          previousVisibilityState,
+        );
+      } else {
+        delete (document as Document & { visibilityState?: string })
+          .visibilityState;
+      }
+    }
   }, 10000);
 
   it("requests macOS accessibility access from the permissions section", async () => {

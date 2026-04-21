@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import type {
   AppConfig,
   SafeKeyPreset,
@@ -83,7 +83,7 @@ function saveStateLabel(
   return "Changes apply automatically.";
 }
 
-export function SettingsForm({
+export const SettingsForm = memo(function SettingsForm({
   config,
   customInputLabel,
   safeKeyOptions,
@@ -376,4 +376,6 @@ export function SettingsForm({
       </div>
     </section>
   );
-}
+});
+
+SettingsForm.displayName = "SettingsForm";

@@ -50,6 +50,8 @@ function serializeConfig(config: AppConfig) {
 
 function App() {
   const [serverState, setServerState] = useState<FrontendState | null>(null);
+  const [runtimeSnapshot, setRuntimeSnapshot] =
+    useState<RuntimeSnapshot | null>(null);
   const [draftConfig, setDraftConfig] = useState<AppConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -72,6 +74,7 @@ function App() {
     (nextState: FrontendState, preserveDraft: boolean) => {
       startTransition(() => {
         setServerState(nextState);
+        setRuntimeSnapshot(nextState.runtime);
         setDraftConfig((currentDraft) => {
           if (!preserveDraft || !currentDraft) {
             return nextState.config;
@@ -173,6 +176,7 @@ function App() {
         ) {
           startTransition(() => {
             setServerState(nextState);
+            setRuntimeSnapshot(nextState.runtime);
             setDraftConfig(nextState.config);
           });
         }
@@ -193,14 +197,60 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!serverState) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void (async () => {
+        try {
+          const nextState = await getFrontendState();
+          setRuntimeSnapshot(nextState.runtime);
+        } catch {
+          // Runtime polling is best-effort. We keep the last known snapshot if a
+          // refresh fails rather than interrupting the settings workflow.
+        }
+      })();
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [serverState]);
+
+  useEffect(() => {
+    const refreshVisibleState = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      void (async () => {
+        try {
+          const nextState = await getFrontendState();
+          applyServerState(nextState, true);
+        } catch {
+          // Returning from System Settings should not surface a noisy error if
+          // the refresh misses once; the user can retry the permission flow.
+        }
+      })();
+    };
+
+    window.addEventListener("focus", refreshVisibleState);
+    document.addEventListener("visibilitychange", refreshVisibleState);
+
+    return () => {
+      window.removeEventListener("focus", refreshVisibleState);
+      document.removeEventListener("visibilitychange", refreshVisibleState);
+    };
+  }, [applyServerState]);
+
+  useEffect(() => {
     if (!draftConfig || !dirty || busy) {
       return undefined;
     }
 
-    // The settings window behaves like a desktop preferences pane: it renders a
-    // stable snapshot, then updates that snapshot only when the user saves a new
-    // config. Avoiding background polling here prevents native controls from
-    // being reset underneath in-progress edits.
+    // Config changes are still autosaved with a short debounce so the form
+    // feels like a native preferences pane instead of a manual submit flow.
     const timeoutId = window.setTimeout(() => {
       void persistDraft(draftConfig);
     }, 250);
@@ -209,6 +259,24 @@ function App() {
       window.clearTimeout(timeoutId);
     };
   }, [busy, dirty, draftConfig, persistDraft]);
+
+  useEffect(() => {
+    if (!serverState?.syntheticInputAccess.granted || !permissionNote) {
+      return;
+    }
+
+    // Once macOS reports that posting synthetic events is allowed again, any
+    // earlier "open Settings" helper text is stale and should get out of the
+    // way so the granted state speaks for itself.
+    setPermissionNote(null);
+  }, [permissionNote, serverState?.syntheticInputAccess.granted]);
+
+  const handleConfigChange = useEffectEvent((nextConfig: AppConfig) => {
+    localEditGenerationRef.current += 1;
+    setSaveError(null);
+    setSaveState("idle");
+    setDraftConfig(nextConfig);
+  });
 
   if (!serverState || !draftConfig) {
     return (
@@ -239,17 +307,21 @@ function App() {
           </div>
 
           <div className="toolbar-meta">
-            <span className={`phase-chip phase-${serverState.runtime.phase}`}>
-              {formatPhaseLabel(serverState.runtime.phase)}
+            <span
+              className={`phase-chip phase-${
+                runtimeSnapshot?.phase ?? "waitingQuiet"
+              }`}
+            >
+              {formatPhaseLabel(runtimeSnapshot?.phase ?? "waitingQuiet")}
             </span>
             <span className="meta-pill">{serverState.platformName}</span>
           </div>
         </header>
 
         <div className="content-body">
-          {serverState.runtime.lastError ? (
+          {runtimeSnapshot?.lastError ? (
             <p className="status-banner" role="status">
-              {serverState.runtime.lastError}
+              {runtimeSnapshot.lastError}
             </p>
           ) : null}
 
@@ -264,28 +336,26 @@ function App() {
             saveState={saveState}
             permissionBusy={permissionBusy}
             permissionNote={permissionNote}
-            onRequestSyntheticInputAccess={() => {
-              void requestPermission();
-            }}
-            onRevealSyntheticInputAccessTarget={() => {
-              void revealPermissionTarget();
-            }}
-            onChange={(nextConfig) => {
-              localEditGenerationRef.current += 1;
-              setSaveError(null);
-              setSaveState("idle");
-              setDraftConfig(nextConfig);
-            }}
+            onRequestSyntheticInputAccess={requestPermission}
+            onRevealSyntheticInputAccessTarget={revealPermissionTarget}
+            onChange={handleConfigChange}
           />
         </div>
 
         <footer className="footer-strip" aria-label="Runtime status">
           <span>
-            Status <strong>{serverState.runtime.statusLabel}</strong>
+            Status <strong>{runtimeSnapshot?.statusLabel ?? "Bootstrapping"}</strong>
           </span>
-          <span>{formatRuntimeNote(serverState.runtime)}</span>
           <span>
-            Current key <strong>{serverState.runtime.resolvedInputLabel}</strong>
+            {runtimeSnapshot
+              ? formatRuntimeNote(runtimeSnapshot)
+              : "Preparing runtime status"}
+          </span>
+          <span>
+            Current key{" "}
+            <strong>
+              {runtimeSnapshot?.resolvedInputLabel ?? serverState.config.selectedKey}
+            </strong>
           </span>
           <span>Local only</span>
         </footer>
