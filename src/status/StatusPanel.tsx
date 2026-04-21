@@ -21,42 +21,46 @@ function phaseTone(phase: RuntimeSnapshot["phase"]) {
   }
 }
 
+function nextEvent(runtime: RuntimeSnapshot) {
+  if (runtime.phase === "paused" && runtime.pausedUntilEpochMs) {
+    return {
+      label: "Paused until",
+      value: formatTimestamp(runtime.pausedUntilEpochMs),
+    };
+  }
+
+  return {
+    label: "Next check",
+    value:
+      runtime.nextCheckInSeconds === null ? "Idle" : `${runtime.nextCheckInSeconds}s`,
+  };
+}
+
 type StatusPanelProps = {
   runtime: RuntimeSnapshot;
-  platformName: string;
 };
 
-export function StatusPanel({ runtime, platformName }: StatusPanelProps) {
+export function StatusPanel({ runtime }: StatusPanelProps) {
+  const followUpEvent = nextEvent(runtime);
+
   return (
-    <section className="panel panel-highlight">
+    <section className="sidebar-panel panel-status">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Runtime</p>
-          <h2>Resident engine status</h2>
+          <p className="eyebrow">Activity</p>
+          <h2>Runtime status</h2>
         </div>
         <span className={`pill pill-${phaseTone(runtime.phase)}`}>
           {runtime.statusLabel}
         </span>
       </div>
 
-      <p className="panel-summary">{runtime.detailLabel}</p>
+      <p className="panel-summary panel-summary-tight">{runtime.detailLabel}</p>
 
       <dl className="status-grid">
         <div>
-          <dt>Platform</dt>
-          <dd>{platformName}</dd>
-        </div>
-        <div>
-          <dt>Resolved input</dt>
-          <dd>{runtime.resolvedInputLabel}</dd>
-        </div>
-        <div>
-          <dt>Next check</dt>
-          <dd>
-            {runtime.nextCheckInSeconds === null
-              ? "Idle"
-              : `${runtime.nextCheckInSeconds}s`}
-          </dd>
+          <dt>{followUpEvent.label}</dt>
+          <dd>{followUpEvent.value}</dd>
         </div>
         <div>
           <dt>Last synthetic input</dt>

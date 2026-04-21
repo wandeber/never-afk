@@ -13,16 +13,39 @@ import {
   sendTestInput,
 } from "./api";
 import { QuickActions } from "./controls/QuickActions";
-import { SettingsForm } from "./settings/SettingsForm";
+import {
+  settingsSections,
+  SettingsForm,
+  type SettingsSectionId,
+} from "./settings/SettingsForm";
 import { StatusPanel } from "./status/StatusPanel";
 import type { AppConfig, FrontendState } from "./types";
 import "./App.css";
+
+function formatPhaseLabel(phase: FrontendState["runtime"]["phase"]) {
+  switch (phase) {
+    case "waitingQuiet":
+      return "Waiting";
+    case "observing":
+      return "Observing";
+    case "paused":
+      return "Paused";
+    case "disabled":
+      return "Disabled";
+    case "error":
+      return "Driver Error";
+  }
+}
 
 function App() {
   const [serverState, setServerState] = useState<FrontendState | null>(null);
   const [draftConfig, setDraftConfig] = useState<AppConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Keep the window closer to a native macOS preferences surface by focusing
+  // the detail pane on one topic at a time.
+  const [activeSection, setActiveSection] =
+    useState<SettingsSectionId>("general");
 
   const dirty =
     !!serverState &&
@@ -129,12 +152,13 @@ function App() {
   if (!serverState || !draftConfig) {
     return (
       <main className="app-shell loading-shell">
-        <section className="hero">
-          <p className="eyebrow">Bootstrapping</p>
-          <h1>never-afk</h1>
-          <p className="summary">
-            Loading the resident engine state and persisted settings.
-          </p>
+        <section className="content-shell content-shell-loading">
+          <div className="compact-header">
+            <div>
+              <p className="eyebrow">never-afk</p>
+              <h1 className="screen-title">Loading</h1>
+            </div>
+          </div>
         </section>
       </main>
     );
@@ -142,80 +166,83 @@ function App() {
 
   return (
     <main className="app-shell">
-      <section className="hero">
-        <div>
-          <p className="eyebrow">Personal utility</p>
-          <h1>never-afk</h1>
-          <p className="summary">
-            Local-first idle confirmation and synthetic keyboard activity, with a
-            resident engine that keeps running after the window disappears.
-          </p>
-        </div>
+      <section className="content-shell">
+        <header className="compact-header">
+          <div>
+            <p className="eyebrow">never-afk</p>
+            <h1 className="screen-title">Preferences</h1>
+            <p className="screen-summary">
+              Adjust the resident engine without turning the window into a dashboard.
+            </p>
+          </div>
 
-        <div className="hero-metrics">
-          <article>
-            <span>Platform</span>
-            <strong>{serverState.platformName}</strong>
-          </article>
-          <article>
-            <span>Quiet period</span>
-            <strong>{serverState.config.quietPeriodSeconds}s</strong>
-          </article>
-          <article>
-            <span>Idle confirmation</span>
-            <strong>{serverState.config.idleConfirmationPeriodSeconds}s</strong>
-          </article>
+          <div className="toolbar-meta">
+            <span className={`phase-chip phase-${serverState.runtime.phase}`}>
+              {formatPhaseLabel(serverState.runtime.phase)}
+            </span>
+            <span className="meta-pill">{serverState.platformName}</span>
+          </div>
+        </header>
+
+        <div className="preferences-layout">
+          <aside className="preferences-sidebar">
+            <nav
+              className="sidebar-panel section-nav"
+              aria-label="Preferences sections"
+            >
+              {settingsSections.map((section) => (
+                <button
+                  key={section.id}
+                  className={`section-button${
+                    section.id === activeSection ? " section-button-active" : ""
+                  }`}
+                  type="button"
+                  onClick={() => setActiveSection(section.id)}
+                >
+                  <strong>{section.title}</strong>
+                  <span>{section.sidebarSummary}</span>
+                </button>
+              ))}
+            </nav>
+
+            <StatusPanel runtime={serverState.runtime} />
+            <QuickActions
+              runtime={serverState.runtime}
+              busy={busy}
+              onPause30={() => runAction(() => pauseForMinutes(30))}
+              onPause60={() => runAction(() => pauseForMinutes(60))}
+              onResume={() => runAction(() => resumeEngine())}
+              onRunOnce={() => runAction(() => runOnceNow())}
+              onTestInput={() => runAction(() => sendTestInput())}
+            />
+
+            <section className="sidebar-panel privacy-note">
+              <p className="eyebrow">Privacy</p>
+              <p>
+                Local-only engine. No telemetry, no network traffic, no input
+                history. Observation stops before synthetic input is sent.
+              </p>
+            </section>
+          </aside>
+
+          <div className="detail-column">
+            <SettingsForm
+              activeSection={activeSection}
+              config={draftConfig}
+              customInputLabel={serverState.customInputLabel}
+              safeKeyOptions={serverState.safeKeyOptions}
+              busy={busy}
+              dirty={dirty}
+              saveError={saveError}
+              onChange={(nextConfig) => {
+                setSaveError(null);
+                setDraftConfig(nextConfig);
+              }}
+              onSave={handleSave}
+            />
+          </div>
         </div>
       </section>
-
-      <div className="layout-grid">
-        <div className="primary-column">
-          <StatusPanel
-            runtime={serverState.runtime}
-            platformName={serverState.platformName}
-          />
-          <SettingsForm
-            config={draftConfig}
-            customInputLabel={serverState.customInputLabel}
-            safeKeyOptions={serverState.safeKeyOptions}
-            busy={busy}
-            dirty={dirty}
-            saveError={saveError}
-            onChange={(nextConfig) => {
-              setSaveError(null);
-              setDraftConfig(nextConfig);
-            }}
-            onSave={handleSave}
-          />
-        </div>
-
-        <div className="secondary-column">
-          <QuickActions
-            runtime={serverState.runtime}
-            busy={busy}
-            onPause30={() => runAction(() => pauseForMinutes(30))}
-            onPause60={() => runAction(() => pauseForMinutes(60))}
-            onResume={() => runAction(() => resumeEngine())}
-            onRunOnce={() => runAction(() => runOnceNow())}
-            onTestInput={() => runAction(() => sendTestInput())}
-          />
-
-          <section className="panel">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Policy</p>
-                <h2>Project constraints</h2>
-              </div>
-            </div>
-            <ul className="constraint-list">
-              <li>No telemetry, networking or remote crash reporting.</li>
-              <li>No input logging, history collection or app-specific integrations.</li>
-              <li>The engine must stop observing before it sends fake input.</li>
-              <li>The tray remains the primary control surface; the window is disposable.</li>
-            </ul>
-          </section>
-        </div>
-      </div>
     </main>
   );
 }

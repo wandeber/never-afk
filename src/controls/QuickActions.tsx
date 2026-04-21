@@ -20,28 +20,53 @@ export function QuickActions({
   onTestInput,
 }: QuickActionsProps) {
   return (
-    <section className="panel">
+    <section className="sidebar-panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Controls</p>
+          <p className="eyebrow">Utilities</p>
           <h2>Quick actions</h2>
         </div>
       </div>
 
+      <p className="panel-summary">
+        Run a one-off action without opening the tray menu.
+      </p>
+
       <div className="action-grid">
-        <button type="button" onClick={onPause30} disabled={busy}>
-          Pause for 30 min
-        </button>
-        <button type="button" onClick={onPause60} disabled={busy}>
-          Pause for 1 h
-        </button>
-        <button type="button" onClick={onRunOnce} disabled={busy}>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={onRunOnce}
+          disabled={busy}
+        >
           Run once now
         </button>
-        <button type="button" onClick={onTestInput} disabled={busy}>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={onTestInput}
+          disabled={busy}
+        >
           Send test input
         </button>
         <button
+          className="secondary-button"
+          type="button"
+          onClick={onPause30}
+          disabled={busy}
+        >
+          Pause for 30 min
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={onPause60}
+          disabled={busy}
+        >
+          Pause for 1 h
+        </button>
+        <button
+          className="secondary-button"
           type="button"
           onClick={onResume}
           disabled={busy || runtime.phase !== "paused"}
