@@ -1,20 +1,7 @@
-import {
-  startTransition,
-  useEffect,
-  useEffectEvent,
-  useState,
-} from "react";
-import {
-  getFrontendState,
-  saveConfig,
-} from "./api";
-import {
-  settingsSections,
-  SettingsForm,
-  type SettingsSectionId,
-} from "./settings/SettingsForm";
-import { StatusPanel } from "./status/StatusPanel";
-import type { AppConfig, FrontendState } from "./types";
+import { startTransition, useEffect, useEffectEvent, useState } from "react";
+import { getFrontendState, saveConfig } from "./api";
+import { SettingsForm } from "./settings/SettingsForm";
+import type { AppConfig, FrontendState, RuntimeSnapshot } from "./types";
 import "./App.css";
 
 function formatPhaseLabel(phase: FrontendState["runtime"]["phase"]) {
@@ -32,15 +19,31 @@ function formatPhaseLabel(phase: FrontendState["runtime"]["phase"]) {
   }
 }
 
+function formatTimestamp(epochMs: number | null) {
+  if (!epochMs) {
+    return "not yet";
+  }
+
+  return new Date(epochMs).toLocaleString();
+}
+
+function formatRuntimeNote(runtime: RuntimeSnapshot) {
+  if (runtime.phase === "paused" && runtime.pausedUntilEpochMs) {
+    return `Paused until ${formatTimestamp(runtime.pausedUntilEpochMs)}.`;
+  }
+
+  if (runtime.nextCheckInSeconds === null) {
+    return "Waiting for the next activity cycle.";
+  }
+
+  return `Next check in ${runtime.nextCheckInSeconds}s.`;
+}
+
 function App() {
   const [serverState, setServerState] = useState<FrontendState | null>(null);
   const [draftConfig, setDraftConfig] = useState<AppConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  // Keep the window closer to a native macOS preferences surface by focusing
-  // the detail pane on one topic at a time.
-  const [activeSection, setActiveSection] =
-    useState<SettingsSectionId>("general");
 
   const dirty =
     !!serverState &&
@@ -120,12 +123,16 @@ function App() {
     };
   }, [applyServerState, serverState]);
 
-  async function runAction(action: () => Promise<FrontendState>) {
+  async function handleSave() {
+    if (!draftConfig) {
+      return;
+    }
+
     setBusy(true);
     setSaveError(null);
 
     try {
-      const nextState = await action();
+      const nextState = await saveConfig(draftConfig);
       applyServerState(nextState, dirty);
     } catch (error) {
       setSaveError(
@@ -134,14 +141,6 @@ function App() {
     } finally {
       setBusy(false);
     }
-  }
-
-  async function handleSave() {
-    if (!draftConfig) {
-      return;
-    }
-
-    await runAction(() => saveConfig(draftConfig));
   }
 
   if (!serverState || !draftConfig) {
@@ -165,9 +164,12 @@ function App() {
         <header className="compact-header">
           <div>
             <p className="eyebrow">never-afk</p>
-            <h1 className="screen-title">Preferences</h1>
+            <h1 className="screen-title">Settings</h1>
             <p className="screen-summary">
-              Adjust the resident engine without turning the window into a dashboard.
+              Quietly keeps activity alive after it confirms that you are idle.
+            </p>
+            <p className="screen-runtime">
+              {serverState.runtime.detailLabel} {formatRuntimeNote(serverState.runtime)}
             </p>
           </div>
 
@@ -179,54 +181,34 @@ function App() {
           </div>
         </header>
 
-        <div className="preferences-layout">
-          <aside className="preferences-sidebar">
-            <nav
-              className="sidebar-panel section-nav"
-              aria-label="Preferences sections"
-            >
-              {settingsSections.map((section) => (
-                <button
-                  key={section.id}
-                  className={`section-button${
-                    section.id === activeSection ? " section-button-active" : ""
-                  }`}
-                  type="button"
-                  onClick={() => setActiveSection(section.id)}
-                >
-                  <strong>{section.title}</strong>
-                  <span>{section.sidebarSummary}</span>
-                </button>
-              ))}
-            </nav>
-
-            <StatusPanel runtime={serverState.runtime} />
-
-            <section className="sidebar-panel privacy-note">
-              <p className="eyebrow">Privacy</p>
-              <p>
-                Local-only engine. No telemetry, no network traffic, no input
-                history. Observation stops before synthetic input is sent.
-              </p>
-            </section>
-          </aside>
-
-          <div className="detail-column">
-            <SettingsForm
-              activeSection={activeSection}
-              config={draftConfig}
-              customInputLabel={serverState.customInputLabel}
-              safeKeyOptions={serverState.safeKeyOptions}
-              busy={busy}
-              dirty={dirty}
-              saveError={saveError}
-              onChange={(nextConfig) => {
-                setSaveError(null);
-                setDraftConfig(nextConfig);
-              }}
-              onSave={handleSave}
-            />
+        {serverState.runtime.lastError ? (
+          <div className="content-body">
+            <p className="status-banner" role="status">
+              {serverState.runtime.lastError}
+            </p>
           </div>
+        ) : null}
+
+        <div className="content-body">
+          <SettingsForm
+            config={draftConfig}
+            customInputLabel={serverState.customInputLabel}
+            safeKeyOptions={serverState.safeKeyOptions}
+            busy={busy}
+            dirty={dirty}
+            saveError={saveError}
+            runtime={serverState.runtime}
+            onChange={(nextConfig) => {
+              setSaveError(null);
+              setDraftConfig(nextConfig);
+            }}
+            onSave={handleSave}
+          />
+
+          <p className="privacy-footnote">
+            Local-only utility. No telemetry, no network traffic, and no input
+            history is stored.
+          </p>
         </div>
       </section>
     </main>
