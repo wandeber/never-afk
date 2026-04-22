@@ -57,10 +57,10 @@ impl<R: Runtime> TrayHandles<R> {
             .set_checked(config.enabled)
             .map_err(|error| format!("Failed to update tray enabled state: {error}"))?;
         self.icon
-            .set_title(format_last_event_title(
+            .set_title(Some(format_last_event_title(
                 snapshot.last_fake_input_epoch_ms,
                 config.show_last_event_in_menu_bar,
-            ))
+            )))
             .map_err(|error| format!("Failed to update the tray title: {error}"))?;
 
         Ok(())
@@ -77,12 +77,12 @@ fn format_last_event_menu_text(last_fake_input_epoch_ms: Option<u64>) -> String 
 fn format_last_event_title(
     last_fake_input_epoch_ms: Option<u64>,
     show_last_event_in_menu_bar: bool,
-) -> Option<String> {
+) -> String {
     if !show_last_event_in_menu_bar {
-        return None;
+        return String::new();
     }
 
-    last_fake_input_epoch_ms.and_then(format_timestamp_for_title)
+    format_timestamp_for_title(last_fake_input_epoch_ms).unwrap_or_default()
 }
 
 fn format_timestamp_for_menu(epoch_ms: u64) -> Option<String> {
@@ -92,11 +92,28 @@ fn format_timestamp_for_menu(epoch_ms: u64) -> Option<String> {
     Some(timestamp.format("%Y-%m-%d %H:%M").to_string())
 }
 
-fn format_timestamp_for_title(epoch_ms: u64) -> Option<String> {
+fn format_timestamp_for_title(last_fake_input_epoch_ms: Option<u64>) -> Option<String> {
     // The visible menu-bar title must stay short enough to avoid stealing too
     // much horizontal space from the rest of the macOS status items.
-    let timestamp = Local.timestamp_millis_opt(epoch_ms as i64).single()?;
+    let timestamp = Local
+        .timestamp_millis_opt(last_fake_input_epoch_ms? as i64)
+        .single()?;
     Some(timestamp.format("%d/%m %H:%M").to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_last_event_title;
+
+    #[test]
+    fn clears_menu_bar_title_when_visibility_is_disabled() {
+        assert_eq!(format_last_event_title(Some(1_713_847_200_000), false), "");
+    }
+
+    #[test]
+    fn clears_menu_bar_title_when_no_event_is_available() {
+        assert_eq!(format_last_event_title(None, true), "");
+    }
 }
 
 pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, String> {
