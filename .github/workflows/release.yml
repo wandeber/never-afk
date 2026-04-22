@@ -46,10 +46,10 @@ jobs:
         include:
           - label: macOS Apple Silicon
             runner: macos-15
-            bundleArgs: --bundles dmg,app
+            bundleArgs: --bundles dmg
           - label: Windows x64
             runner: windows-latest
-            bundleArgs: --bundles msi,nsis
+            bundleArgs: --bundles nsis
 
     runs-on: ${{ matrix.runner }}
 
@@ -92,7 +92,7 @@ jobs:
             - Because these builds are not shipped with a Developer ID distribution signature or notarization, Gatekeeper may require **Open Anyway** the first time you launch them.
 
             Windows:
-            - Download the `.msi` or `.exe` installer.
+            - Download the `.exe` installer.
             - SmartScreen may warn because the installer is unsigned.
           generateReleaseNotes: true
           releaseDraft: false
