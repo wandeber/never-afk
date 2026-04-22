@@ -1,10 +1,12 @@
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager, Wry};
+
+#[cfg(target_os = "macos")]
+use std::process::Command;
 
 use crate::config::{
     load_last_fake_input_epoch_ms, load_persisted_config, safe_key_options,

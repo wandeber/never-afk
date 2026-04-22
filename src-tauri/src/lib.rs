@@ -8,10 +8,12 @@ mod tray;
 use config::AppConfig;
 use engine::RuntimeSnapshot;
 use state::{FrontendState, SharedAppContext};
-use tauri::{ActivationPolicy, Manager, RunEvent, State, WindowEvent};
+use tauri::{Manager, RunEvent, State, WindowEvent};
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri_plugin_autostart::MacosLauncher;
+#[cfg(target_os = "macos")]
+use tauri::ActivationPolicy;
 
 fn boxed_error(message: String) -> Box<dyn std::error::Error> {
     Box::new(std::io::Error::new(std::io::ErrorKind::Other, message))

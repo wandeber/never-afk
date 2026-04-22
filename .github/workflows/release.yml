@@ -47,9 +47,6 @@ jobs:
           - label: macOS Apple Silicon
             runner: macos-15
             bundleArgs: --bundles dmg,app
-          - label: macOS Intel
-            runner: macos-15-intel
-            bundleArgs: --bundles dmg,app
           - label: Windows x64
             runner: windows-latest
             bundleArgs: --bundles msi,nsis
