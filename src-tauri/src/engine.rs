@@ -33,10 +33,7 @@ pub struct RuntimeSnapshot {
 }
 
 impl RuntimeSnapshot {
-    pub fn bootstrap(
-        resolved_input_label: String,
-        last_fake_input_epoch_ms: Option<u64>,
-    ) -> Self {
+    pub fn bootstrap(resolved_input_label: String, last_fake_input_epoch_ms: Option<u64>) -> Self {
         Self {
             phase: EnginePhase::WaitingQuiet,
             status_label: "Bootstrapping".into(),
@@ -114,12 +111,14 @@ fn engine_loop(context: SharedAppContext) {
         }
 
         let config_generation = context.config_generation();
-        if wait_for_quiet_period(&context, &config, &resolved_input_label, config_generation).is_err()
+        if wait_for_quiet_period(&context, &config, &resolved_input_label, config_generation)
+            .is_err()
         {
             continue;
         }
 
-        if observe_idle_window(&context, &config, &resolved_input_label, config_generation).is_err() {
+        if observe_idle_window(&context, &config, &resolved_input_label, config_generation).is_err()
+        {
             continue;
         }
 

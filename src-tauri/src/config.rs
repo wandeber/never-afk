@@ -234,7 +234,8 @@ impl AppConfig {
                     self.platform_key_mapping.macos_key_code = Some(current_platform_code);
                 }
                 PlatformKind::Windows => {
-                    self.platform_key_mapping.windows_virtual_key_code = Some(current_platform_code);
+                    self.platform_key_mapping.windows_virtual_key_code =
+                        Some(current_platform_code);
                 }
                 PlatformKind::Unsupported => {}
             }
@@ -414,8 +415,9 @@ pub fn save_last_fake_input_epoch_ms(
 
     match epoch_ms {
         Some(epoch_ms) => {
-            let value = serde_json::to_value(epoch_ms)
-                .map_err(|error| format!("Failed to serialize last fake-input timestamp: {error}"))?;
+            let value = serde_json::to_value(epoch_ms).map_err(|error| {
+                format!("Failed to serialize last fake-input timestamp: {error}")
+            })?;
             store.set(LAST_FAKE_INPUT_EPOCH_MS_STORE_KEY.to_string(), value);
         }
         None => {
@@ -456,7 +458,10 @@ mod tests {
         let normalized = config.validate_and_normalize(PlatformKind::Macos).unwrap();
 
         assert_eq!(normalized.platform_key_mapping.macos_key_code, Some(113));
-        assert_eq!(normalized.platform_key_mapping.windows_virtual_key_code, None);
+        assert_eq!(
+            normalized.platform_key_mapping.windows_virtual_key_code,
+            None
+        );
     }
 
     #[test]

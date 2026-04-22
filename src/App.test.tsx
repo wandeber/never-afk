@@ -17,26 +17,26 @@ import type {
 
 const apiMocks = vi.hoisted(() => ({
   getFrontendState: vi.fn<() => Promise<FrontendState>>(),
+  getRuntimeSnapshot: vi.fn<() => Promise<RuntimeSnapshot>>(),
   revealSyntheticInputAccessTarget: vi.fn<() => Promise<FrontendState>>(),
   requestSyntheticInputAccess: vi.fn<() => Promise<FrontendState>>(),
   saveConfig: vi.fn<(config: AppConfig) => Promise<FrontendState>>(),
-  sendVirtualA: vi.fn<() => Promise<FrontendState>>(),
 }));
 
 vi.mock("./api", () => ({
   getFrontendState: apiMocks.getFrontendState,
+  getRuntimeSnapshot: apiMocks.getRuntimeSnapshot,
   revealSyntheticInputAccessTarget: apiMocks.revealSyntheticInputAccessTarget,
   requestSyntheticInputAccess: apiMocks.requestSyntheticInputAccess,
   saveConfig: apiMocks.saveConfig,
-  sendVirtualA: apiMocks.sendVirtualA,
 }));
 
 const {
   getFrontendState,
+  getRuntimeSnapshot,
   revealSyntheticInputAccessTarget,
   requestSyntheticInputAccess,
   saveConfig,
-  sendVirtualA,
 } = apiMocks;
 
 function makeRuntimeSnapshot(
@@ -96,7 +96,6 @@ function makeFrontendState(
       { id: "F14", label: "F14", supported: true },
       { id: "F15", label: "F15", supported: true },
     ],
-    platformName: "macOS",
     customInputLabel: "macOS key code",
     syntheticInputAccess: {
       supported: true,
@@ -122,21 +121,13 @@ describe("App", () => {
     ).IS_REACT_ACT_ENVIRONMENT = true;
 
     getFrontendState.mockResolvedValue(makeFrontendState());
+    getRuntimeSnapshot.mockResolvedValue(makeRuntimeSnapshot());
     revealSyntheticInputAccessTarget.mockResolvedValue(makeFrontendState());
     requestSyntheticInputAccess.mockResolvedValue(
       makeFrontendState({}, {}, { granted: true }),
     );
     saveConfig.mockImplementation(async (config) =>
       makeFrontendState(config, { resolvedInputLabel: config.selectedKey }),
-    );
-    sendVirtualA.mockResolvedValue(
-      makeFrontendState(
-        {},
-        {
-          detailLabel: "Typed A via virtual keyboard test.",
-          lastFakeInputEpochMs: 123456789,
-        },
-      ),
     );
   });
 
@@ -173,17 +164,16 @@ describe("App", () => {
 
   it("polls runtime updates without resetting the current key selection", async () => {
     getFrontendState.mockReset();
+    getRuntimeSnapshot.mockReset();
     getFrontendState
       .mockResolvedValueOnce(makeFrontendState())
-      .mockResolvedValue(
-        makeFrontendState(
-          { selectedKey: "A" },
-          {
-            nextCheckInSeconds: 45,
-            resolvedInputLabel: "A",
-          },
-        ),
-      );
+      .mockResolvedValue(makeFrontendState({ selectedKey: "A" }));
+    getRuntimeSnapshot.mockResolvedValue(
+      makeRuntimeSnapshot({
+        nextCheckInSeconds: 45,
+        resolvedInputLabel: "A",
+      }),
+    );
 
     render(<App />);
 
@@ -198,9 +188,7 @@ describe("App", () => {
       await new Promise((resolve) => window.setTimeout(resolve, 1200));
     });
 
-    await waitFor(() =>
-      expect(getFrontendState.mock.calls.length).toBeGreaterThanOrEqual(2),
-    );
+    await waitFor(() => expect(getRuntimeSnapshot).toHaveBeenCalledTimes(1));
     expect(screen.getByText("Next check in 45s")).toBeTruthy();
     expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("A");
     expect(screen.getByText(/Current key/i).textContent).toContain("A");
@@ -270,22 +258,6 @@ describe("App", () => {
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Access Granted" }),
-      ).toBeTruthy(),
-    );
-  }, 10000);
-
-  it("triggers the dedicated virtual keyboard A test", async () => {
-    render(<App />);
-
-    const typeAButton = await screen.findByRole("button", {
-      name: "Type A In 2s",
-    });
-    fireEvent.click(typeAButton);
-
-    await waitFor(() => expect(sendVirtualA).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(
-        screen.getByText(/Focus your text editor immediately/i),
       ).toBeTruthy(),
     );
   }, 10000);

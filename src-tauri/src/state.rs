@@ -1,7 +1,6 @@
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, RwLock};
-use std::process::Command;
-use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -18,7 +17,6 @@ use crate::platform::{
 use crate::tray::TrayHandles;
 
 pub type SharedAppContext = Arc<AppContext>;
-const VIRTUAL_KEYBOARD_TEST_DELAY: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,7 +24,6 @@ pub struct FrontendState {
     pub config: AppConfig,
     pub runtime: RuntimeSnapshot,
     pub safe_key_options: Vec<crate::config::SafeKeyOption>,
-    pub platform_name: String,
     pub custom_input_label: String,
     pub synthetic_input_access: SyntheticInputAccessState,
 }
@@ -54,7 +51,10 @@ pub struct AppContext {
 }
 
 impl AppContext {
-    pub fn bootstrap(app_handle: AppHandle<Wry>, driver: Box<dyn PlatformDriver>) -> Result<SharedAppContext, String> {
+    pub fn bootstrap(
+        app_handle: AppHandle<Wry>,
+        driver: Box<dyn PlatformDriver>,
+    ) -> Result<SharedAppContext, String> {
         let platform_kind = driver.kind();
         let mut config = load_persisted_config(&app_handle, platform_kind)?;
         let autostart_enabled = current_autostart_state(&app_handle)?;
@@ -103,10 +103,6 @@ impl AppContext {
         self.driver.kind()
     }
 
-    pub fn platform_name(&self) -> &'static str {
-        self.driver.name()
-    }
-
     pub fn config_snapshot(&self) -> AppConfig {
         self.config.read().unwrap().clone()
     }
@@ -120,7 +116,6 @@ impl AppContext {
             config: self.config_snapshot(),
             runtime: self.runtime_snapshot(),
             safe_key_options: safe_key_options(self.platform_kind()),
-            platform_name: self.platform_name().to_string(),
             custom_input_label: self.platform_kind().custom_input_label().to_string(),
             synthetic_input_access: SyntheticInputAccessState {
                 supported: synthetic_input_access_request_supported(),
@@ -263,58 +258,6 @@ impl AppContext {
         Ok(())
     }
 
-    pub fn perform_text_input_now(&self, text: &str, reason: &str) -> Result<(), String> {
-        self.driver.send_text_input(text)?;
-        let last_fake_input_epoch_ms = self.now_epoch_ms();
-
-        // The virtual-keyboard test is still a synthetic event owned by this
-        // app, so we persist the timestamp exactly like the regular engine path.
-        let _ = save_last_fake_input_epoch_ms(&self.app_handle, Some(last_fake_input_epoch_ms));
-
-        self.update_runtime_snapshot(|snapshot| {
-            snapshot.last_fake_input_epoch_ms = Some(last_fake_input_epoch_ms);
-            snapshot.last_error = None;
-            snapshot.detail_label = format!("Typed {text} via {reason}.");
-        });
-        self.refresh_tray();
-
-        Ok(())
-    }
-
-    pub fn schedule_text_input_test(self: &SharedAppContext, text: &str, reason: &str) {
-        let text_to_type = text.to_string();
-        let reason = reason.to_string();
-
-        // Clicking a button inside the settings window naturally steals focus
-        // away from the text editor the user wants to test against. We hide the
-        // window and delay the synthetic key briefly so the user has time to
-        // bring the editor back to the front before the event is posted.
-        let _ = self.hide_settings_window();
-        self.update_runtime_snapshot(|snapshot| {
-            snapshot.last_error = None;
-            snapshot.detail_label = format!(
-                "Virtual keyboard test queued. Focus your editor within {} seconds.",
-                VIRTUAL_KEYBOARD_TEST_DELAY.as_secs()
-            );
-        });
-        self.refresh_tray();
-
-        let context = Arc::clone(self);
-        let _ = thread::Builder::new()
-            .name("never-afk-virtual-keyboard-test".into())
-            .spawn(move || {
-                thread::sleep(VIRTUAL_KEYBOARD_TEST_DELAY);
-
-                if let Err(error) = context.perform_text_input_now(&text_to_type, &reason) {
-                    context.update_runtime_snapshot(|snapshot| {
-                        snapshot.last_error = Some(error.clone());
-                        snapshot.detail_label = error;
-                    });
-                    context.refresh_tray();
-                }
-            });
-    }
-
     pub fn request_synthetic_input_access(&self) -> Result<(), String> {
         // Requesting access is a side effect owned by the OS. If the prompt
         // does not grant access immediately, we open the exact Accessibility
@@ -332,7 +275,9 @@ impl AppContext {
         #[cfg(target_os = "macos")]
         {
             let status = Command::new("open")
-                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+                .arg(
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+                )
                 .status()
                 .map_err(|error| format!("Failed to open macOS Accessibility settings: {error}"))?;
 
@@ -357,7 +302,9 @@ impl AppContext {
                 .arg("-R")
                 .arg(&executable_path)
                 .status()
-                .map_err(|error| format!("Failed to reveal the current executable in Finder: {error}"))?;
+                .map_err(|error| {
+                    format!("Failed to reveal the current executable in Finder: {error}")
+                })?;
 
             if status.success() {
                 return Ok(());

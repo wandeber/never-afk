@@ -45,7 +45,9 @@ button {
 
 .app-shell {
   min-height: 100vh;
+  height: 100vh;
   width: 100%;
+  overflow: hidden;
 }
 
 .loading-shell {
@@ -57,6 +59,7 @@ button {
   display: grid;
   grid-template-rows: auto 1fr auto;
   min-height: 100vh;
+  height: 100vh;
   width: 100%;
   background:
     linear-gradient(180deg, rgba(248, 247, 243, 0.95), rgba(238, 236, 230, 0.98));
@@ -77,7 +80,9 @@ button {
 }
 
 .content-body {
-  padding: 1rem 1.25rem 1.15rem;
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem 1.25rem calc(5rem + env(safe-area-inset-bottom, 0px));
 }
 
 .eyebrow {
@@ -111,7 +116,6 @@ button {
   gap: 0.55rem;
 }
 
-.meta-pill,
 .phase-chip,
 .access-chip {
   display: inline-flex;
@@ -123,12 +127,6 @@ button {
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: -0.01em;
-}
-
-.meta-pill {
-  border: 1px solid rgba(50, 56, 70, 0.08);
-  background: rgba(255, 255, 255, 0.62);
-  color: #5f6673;
 }
 
 .phase-chip {
@@ -391,12 +389,18 @@ button {
 }
 
 .footer-strip {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem 1.2rem;
   padding: 0.75rem 1.25rem;
   border-top: 1px solid rgba(40, 44, 53, 0.08);
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(250, 249, 245, 0.88);
+  backdrop-filter: blur(16px);
   color: #616874;
   font-size: 0.84rem;
 }
@@ -425,5 +429,9 @@ button {
 
   .toolbar-meta {
     flex-wrap: wrap;
+  }
+
+  .content-body {
+    padding-bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
   }
 }

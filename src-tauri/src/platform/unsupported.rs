@@ -10,10 +10,6 @@ impl PlatformDriver for UnsupportedDriver {
         PlatformKind::Unsupported
     }
 
-    fn name(&self) -> &'static str {
-        "Unsupported"
-    }
-
     fn seconds_since_last_input(&self) -> Result<Duration, String> {
         Err("This platform is not supported by never-afk.".into())
     }

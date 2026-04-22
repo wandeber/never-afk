@@ -20,10 +20,6 @@ impl PlatformDriver for WindowsDriver {
         PlatformKind::Windows
     }
 
-    fn name(&self) -> &'static str {
-        "Windows"
-    }
-
     fn seconds_since_last_input(&self) -> Result<Duration, String> {
         let mut info = LASTINPUTINFO {
             cbSize: size_of::<LASTINPUTINFO>() as u32,

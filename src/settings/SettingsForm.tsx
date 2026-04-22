@@ -3,10 +3,9 @@ import type {
   AppConfig,
   SafeKeyPreset,
   SafeKeyOption,
+  SaveState,
   SyntheticInputAccessState,
 } from "../types";
-
-type SaveState = "idle" | "saving" | "saved";
 
 type SettingsFormProps = {
   config: AppConfig;
@@ -19,11 +18,8 @@ type SettingsFormProps = {
   saveState: SaveState;
   permissionBusy: boolean;
   permissionNote: string | null;
-  virtualKeyBusy: boolean;
-  virtualKeyNote: string | null;
   onRequestSyntheticInputAccess: () => void;
   onRevealSyntheticInputAccessTarget: () => void;
-  onTriggerVirtualA: () => void;
   onChange: (nextConfig: AppConfig) => void;
 };
 
@@ -97,18 +93,10 @@ export const SettingsForm = memo(function SettingsForm({
   saveState,
   permissionBusy,
   permissionNote,
-  virtualKeyBusy,
-  virtualKeyNote,
   onRequestSyntheticInputAccess,
   onRevealSyntheticInputAccessTarget,
-  onTriggerVirtualA,
   onChange,
 }: SettingsFormProps) {
-  const supportedPresetKeysLabel = safeKeyOptions
-    .filter((option) => option.supported)
-    .map((option) => option.label)
-    .join(", ");
-
   return (
     <section className="preferences-pane">
       <section className="preferences-group">
@@ -223,7 +211,7 @@ export const SettingsForm = memo(function SettingsForm({
         <div className="preferences-list">
           <PreferenceRow
             title="Preset key"
-            description={`Built-in presets available here: ${supportedPresetKeysLabel}. Modifier presets use canonical left-side key codes, while letter presets use the standard key for that character.`}
+            description="Choose one of the built-in safe presets. Modifier presets use canonical left-side key codes."
           >
             <select
               className="preference-input"
@@ -302,7 +290,7 @@ export const SettingsForm = memo(function SettingsForm({
           <div className="preferences-list">
             <PreferenceRow
               title="Accessibility access"
-              description="Required for test input and scheduled key presses to be delivered to the focused app."
+              description="Required for scheduled synthetic key presses to be delivered to the focused app."
             >
               <span
                 className={`permission-status ${
@@ -348,30 +336,10 @@ export const SettingsForm = memo(function SettingsForm({
               </div>
             </PreferenceRow>
 
-            <PreferenceRow
-              title="Virtual keyboard test"
-              description="Queue a literal capital A, hide this window, and give you 2 seconds to refocus TextEdit or another editor before the event fires."
-            >
-              <div className="stacked-control">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  disabled={virtualKeyBusy}
-                  onClick={onTriggerVirtualA}
-                >
-                  {virtualKeyBusy ? "Scheduling…" : "Type A In 2s"}
-                </button>
-
-                {virtualKeyNote ? (
-                  <p className="inline-note">{virtualKeyNote}</p>
-                ) : null}
-              </div>
-            </PreferenceRow>
-
             {syntheticInputAccess.targetPath ? (
               <PreferenceRow
                 title="Current executable"
-                description="This exact binary is the one macOS must allow while the app runs in tauri dev."
+                description="This exact executable is the one macOS must allow in Accessibility for the current app session."
               >
                 <code className="path-chip">{syntheticInputAccess.targetPath}</code>
               </PreferenceRow>
@@ -382,8 +350,8 @@ export const SettingsForm = memo(function SettingsForm({
             <p className="permission-note">
               {permissionNote ??
                 (syntheticInputAccess.granted
-                  ? "Accessibility access is enabled. You can retry the text editor test now."
-                  : "After approving access, return here and test the synthetic key again in your editor.")}
+                  ? "Accessibility access is enabled. Scheduled synthetic keys can now reach other apps."
+                  : "After approving access, return here and the engine should be able to deliver the configured synthetic key.")}
             </p>
           </div>
         </section>

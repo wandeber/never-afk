@@ -17,6 +17,7 @@ export type SafeKeyPreset =
   | "F24";
 
 export type ActivityMethod = "keyboard";
+export type SaveState = "idle" | "saving" | "saved";
 
 export type EnginePhase =
   | "disabled"
@@ -71,7 +72,6 @@ export type FrontendState = {
   config: AppConfig;
   runtime: RuntimeSnapshot;
   safeKeyOptions: SafeKeyOption[];
-  platformName: string;
   customInputLabel: string;
   syntheticInputAccess: SyntheticInputAccessState;
 };

@@ -5,6 +5,7 @@ mod state;
 mod tray;
 
 use config::AppConfig;
+use engine::RuntimeSnapshot;
 use state::{FrontendState, SharedAppContext};
 use tauri::{ActivationPolicy, Manager, State, WindowEvent};
 
@@ -21,44 +22,16 @@ fn get_frontend_state(state: State<'_, SharedAppContext>) -> FrontendState {
 }
 
 #[tauri::command]
+fn get_runtime_snapshot(state: State<'_, SharedAppContext>) -> RuntimeSnapshot {
+    state.runtime_snapshot()
+}
+
+#[tauri::command]
 fn save_config(
     state: State<'_, SharedAppContext>,
     config: AppConfig,
 ) -> Result<FrontendState, String> {
     state.persist_config_change(config)?;
-    Ok(state.frontend_state())
-}
-
-#[tauri::command]
-fn pause_for_minutes(
-    state: State<'_, SharedAppContext>,
-    minutes: u64,
-) -> FrontendState {
-    state.pause_for_minutes(minutes);
-    state.frontend_state()
-}
-
-#[tauri::command]
-fn resume_engine(state: State<'_, SharedAppContext>) -> FrontendState {
-    state.clear_pause();
-    state.frontend_state()
-}
-
-#[tauri::command]
-fn run_once_now(state: State<'_, SharedAppContext>) -> FrontendState {
-    state.request_manual_run();
-    state.frontend_state()
-}
-
-#[tauri::command]
-fn send_test_input(state: State<'_, SharedAppContext>) -> Result<FrontendState, String> {
-    state.perform_fake_input_now("manual test")?;
-    Ok(state.frontend_state())
-}
-
-#[tauri::command]
-fn send_virtual_a_command(state: State<'_, SharedAppContext>) -> Result<FrontendState, String> {
-    state.inner().clone().schedule_text_input_test("A", "virtual keyboard test");
     Ok(state.frontend_state())
 }
 
@@ -138,12 +111,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_frontend_state,
+            get_runtime_snapshot,
             save_config,
-            pause_for_minutes,
-            resume_engine,
-            run_once_now,
-            send_test_input,
-            send_virtual_a_command,
             request_synthetic_input_access_command,
             reveal_synthetic_input_access_target_command
         ]);

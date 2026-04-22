@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use core_graphics::event::{CGEvent, CGEventTapLocation, CGEventType};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-use objc2_app_kit::NSWorkspace;
 
 use crate::config::{PlatformKind, ResolvedKeyboardInput};
 use crate::platform::PlatformDriver;
@@ -25,8 +24,11 @@ unsafe extern "C" {
 #[derive(Default)]
 pub struct MacosDriver;
 
-const SYNTHETIC_EVENT_TAP_LOCATION: CGEventTapLocation = CGEventTapLocation::Session;
-const TEXT_INJECTION_CARRIER_KEY_CODE: u16 = 0x00;
+// The resident engine should behave like a normal Quartz keyboard event that
+// travels through the global input stream, not like text injected directly
+// into one target process. Posting at the HID boundary is the closest Core
+// Graphics path to a system-wide synthetic key press.
+const GLOBAL_SYNTHETIC_EVENT_TAP_LOCATION: CGEventTapLocation = CGEventTapLocation::HID;
 
 fn missing_post_event_access_message() -> String {
     "never-afk needs Accessibility permission to send synthetic key events. Approve it in System Settings > Privacy & Security > Accessibility, then retry the action.".to_string()
@@ -86,41 +88,20 @@ fn event_source() -> Result<CGEventSource, String> {
         .map_err(|_| "Failed to create the CoreGraphics event source.".to_string())
 }
 
-fn frontmost_application_pid() -> Option<i32> {
-    let app = NSWorkspace::sharedWorkspace().frontmostApplication()?;
-    let pid = app.processIdentifier();
-    (pid > 0).then_some(pid)
+fn post_event_globally(event: &CGEvent) {
+    event.post(GLOBAL_SYNTHETIC_EVENT_TAP_LOCATION);
 }
 
-fn post_event(event: &CGEvent) {
-    // When we know which app currently owns focus, delivering the event
-    // directly to that PID avoids relying entirely on the global session event
-    // stream, which has been flaky in this development setup.
-    if let Some(pid) = frontmost_application_pid() {
-        event.post_to_pid(pid);
-        return;
-    }
-
-    event.post(SYNTHETIC_EVENT_TAP_LOCATION);
-}
-
-fn post_keyboard_event_pair(key_code: u16, unicode_text: Option<&str>) -> Result<(), String> {
+fn post_keyboard_event_pair(key_code: u16, deliver: impl Fn(&CGEvent)) -> Result<(), String> {
     let event_source = event_source()?;
 
-    // Posting at the session boundary keeps the synthetic keystroke inside the
-    // current login session, which is exactly where the focused editor expects
-    // to receive typed input. Using the same path for both the regular engine
-    // key presses and the explicit "Type A" test keeps behaviour consistent.
     let key_down = CGEvent::new_keyboard_event(event_source.clone(), key_code, true)
         .map_err(|_| "Failed to create the synthetic key down event.".to_string())?;
-    if let Some(text) = unicode_text {
-        key_down.set_string(text);
-    }
-    post_event(&key_down);
+    deliver(&key_down);
 
     let key_up = CGEvent::new_keyboard_event(event_source, key_code, false)
         .map_err(|_| "Failed to create the synthetic key up event.".to_string())?;
-    post_event(&key_up);
+    deliver(&key_up);
 
     Ok(())
 }
@@ -128,10 +109,6 @@ fn post_keyboard_event_pair(key_code: u16, unicode_text: Option<&str>) -> Result
 impl PlatformDriver for MacosDriver {
     fn kind(&self) -> PlatformKind {
         PlatformKind::Macos
-    }
-
-    fn name(&self) -> &'static str {
-        "macOS"
     }
 
     fn seconds_since_last_input(&self) -> Result<Duration, String> {
@@ -154,23 +131,10 @@ impl PlatformDriver for MacosDriver {
             return Err(missing_post_event_access_message());
         }
 
-        // Two separate events keep the synthetic input as small as possible while still
-        // producing a normal key press lifecycle that apps and the OS both understand.
-        post_keyboard_event_pair(key_code, None)?;
-
-        Ok(())
-    }
-
-    fn send_text_input(&self, text: &str) -> Result<(), String> {
-        if !request_synthetic_input_access() {
-            return Err(missing_post_event_access_message());
-        }
-
-        // The dedicated virtual-keyboard test should type an actual glyph into
-        // the focused editor, not merely replay a hardware key code. Assigning
-        // the Unicode payload makes the intent explicit and much easier to
-        // validate in apps like TextEdit.
-        post_keyboard_event_pair(TEXT_INJECTION_CARRIER_KEY_CODE, Some(text))?;
+        // The engine must publish a regular Quartz key press into the global
+        // input stream so system-wide idle tracking and focused apps observe a
+        // single synthetic key lifecycle, not a private per-process injection.
+        post_keyboard_event_pair(key_code, post_event_globally)?;
 
         Ok(())
     }

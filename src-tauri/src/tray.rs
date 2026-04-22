@@ -167,10 +167,7 @@ pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, Strin
     })
 }
 
-pub fn handle_menu_event(
-    context: SharedAppContext,
-    item_id: &str,
-) -> Result<(), String> {
+pub fn handle_menu_event(context: SharedAppContext, item_id: &str) -> Result<(), String> {
     match item_id {
         ENABLED_ITEM_ID => {
             let mut config = context.config_snapshot();
@@ -199,10 +196,7 @@ pub fn handle_menu_event(
     Ok(())
 }
 
-pub fn handle_tray_click(
-    context: SharedAppContext,
-    event: &TrayIconEvent,
-) -> Result<(), String> {
+pub fn handle_tray_click(context: SharedAppContext, event: &TrayIconEvent) -> Result<(), String> {
     if let TrayIconEvent::Click {
         button: MouseButton::Left,
         button_state: MouseButtonState::Up,
