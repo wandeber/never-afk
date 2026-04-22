@@ -42,8 +42,8 @@ function App() {
             <p className="eyebrow">never-afk</p>
             <h1 className="screen-title">Settings</h1>
             <p className="screen-summary">
-              Configure startup behavior, idle delays and the synthetic key used
-              by the resident engine.
+              Configure startup behavior, schedule windows, idle delays and the
+              synthetic key used by the resident engine.
             </p>
           </div>
         </header>
@@ -74,7 +74,8 @@ function App() {
 
         <footer className="footer-strip" aria-label="Runtime status">
           <span>
-            Status <strong>{runtimeSnapshot?.statusLabel ?? "Bootstrapping"}</strong>
+            Status{" "}
+            <strong>{runtimeSnapshot?.statusLabel ?? "Bootstrapping"}</strong>
           </span>
           <span>
             {runtimeSnapshot
@@ -84,7 +85,8 @@ function App() {
           <span>
             Current key{" "}
             <strong>
-              {runtimeSnapshot?.resolvedInputLabel ?? serverState.config.selectedKey}
+              {runtimeSnapshot?.resolvedInputLabel ??
+                serverState.config.selectedKey}
             </strong>
           </span>
           <span>Local only</span>

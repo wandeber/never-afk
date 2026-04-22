@@ -12,6 +12,7 @@ import type {
   AppConfig,
   FrontendState,
   RuntimeSnapshot,
+  ScheduleRange,
   SyntheticInputAccessState,
 } from "./types";
 
@@ -48,9 +49,21 @@ function makeRuntimeSnapshot(
     detailLabel: "Idle monitoring is running.",
     resolvedInputLabel: "F15",
     nextCheckInSeconds: 120,
+    nextRelevantEpochMs: Date.now() + 120_000,
     pausedUntilEpochMs: null,
     lastFakeInputEpochMs: null,
     lastError: null,
+    ...overrides,
+  };
+}
+
+function makeScheduleRange(
+  overrides: Partial<ScheduleRange> = {},
+): ScheduleRange {
+  return {
+    daysOfWeek: ["Mon"],
+    startMinutes: 9 * 60,
+    endMinutes: 17 * 60,
     ...overrides,
   };
 }
@@ -61,6 +74,8 @@ function makeConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     quietPeriodSeconds: 120,
     idleConfirmationPeriodSeconds: 120,
     startAtLogin: false,
+    scheduleEnabled: false,
+    scheduleRanges: [],
     activityMethod: "keyboard",
     selectedKey: "F15",
     showLastEventInMenuBar: true,
@@ -102,7 +117,8 @@ function makeFrontendState(
       supported: true,
       granted: false,
       canRequest: true,
-      targetPath: "/Users/wandeber/Projects/Personal/never-afk/src-tauri/target/debug/never-afk",
+      targetPath:
+        "/Users/wandeber/Projects/Personal/never-afk/src-tauri/target/debug/never-afk",
       ...accessOverrides,
     },
   };
@@ -197,9 +213,7 @@ describe("App", () => {
     getFrontendState.mockReset();
     getFrontendState
       .mockResolvedValueOnce(makeFrontendState())
-      .mockResolvedValueOnce(
-        makeFrontendState({}, {}, { granted: true }),
-      );
+      .mockResolvedValueOnce(makeFrontendState({}, {}, { granted: true }));
 
     const previousVisibilityState = Object.getOwnPropertyDescriptor(
       document,
@@ -224,7 +238,9 @@ describe("App", () => {
       });
 
       await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Access Granted" })).toBeTruthy(),
+        expect(
+          screen.getByRole("button", { name: "Access Granted" }),
+        ).toBeTruthy(),
       );
       expect(getFrontendState).toHaveBeenCalledTimes(2);
     } finally {
@@ -295,4 +311,65 @@ describe("App", () => {
       ),
     );
   }, 10000);
+
+  it("persists schedule enablement and newly added ranges", async () => {
+    render(<App />);
+
+    await screen.findByText("Use schedule");
+
+    const useScheduleCheckbox = screen
+      .getByText("Use schedule")
+      .closest(".preference-row")
+      ?.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+
+    expect(useScheduleCheckbox?.checked).toBe(false);
+
+    fireEvent.click(useScheduleCheckbox!);
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+    });
+
+    await waitFor(() =>
+      expect(saveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ scheduleEnabled: true }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Range" }));
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+    });
+
+    await waitFor(() =>
+      expect(saveConfig).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          scheduleRanges: [makeScheduleRange()],
+        }),
+      ),
+    );
+  }, 10000);
+
+  it("shows a schedule note when automatic activity is outside schedule", async () => {
+    getFrontendState.mockResolvedValueOnce(
+      makeFrontendState(
+        {
+          scheduleEnabled: true,
+          scheduleRanges: [makeScheduleRange({ daysOfWeek: ["Wed"] })],
+        },
+        {
+          phase: "scheduledOff",
+          statusLabel: "Outside schedule",
+          nextCheckInSeconds: null,
+          nextRelevantEpochMs: new Date("2026-04-22T09:00:00Z").getTime(),
+        },
+      ),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText("Settings")).toBeTruthy();
+    expect(screen.getByText(/Next scheduled range/i)).toBeTruthy();
+  });
 });

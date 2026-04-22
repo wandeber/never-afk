@@ -61,8 +61,11 @@ button {
   min-height: 100vh;
   height: 100vh;
   width: 100%;
-  background:
-    linear-gradient(180deg, rgba(248, 247, 243, 0.95), rgba(238, 236, 230, 0.98));
+  background: linear-gradient(
+    180deg,
+    rgba(248, 247, 243, 0.95),
+    rgba(238, 236, 230, 0.98)
+  );
 }
 
 .content-shell-loading {
@@ -266,6 +269,118 @@ button {
   word-break: break-all;
 }
 
+.schedule-editor {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.schedule-helper,
+.schedule-empty-state,
+.schedule-range-header p,
+.schedule-field-label,
+.schedule-time-field span {
+  margin: 0;
+  color: #68707c;
+}
+
+.schedule-helper,
+.schedule-empty-state {
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.schedule-empty-state {
+  padding: 0.85rem 0.95rem;
+  border-radius: 10px;
+  border: 1px dashed rgba(42, 47, 58, 0.12);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.schedule-range-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.schedule-range-card {
+  display: grid;
+  gap: 0.95rem;
+  padding: 0.95rem;
+  border-radius: 12px;
+  border: 1px solid rgba(40, 44, 53, 0.08);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.schedule-range-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.schedule-range-header h3,
+.schedule-field-label {
+  margin: 0 0 0.2rem;
+}
+
+.schedule-card-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.schedule-field {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.schedule-field-label,
+.schedule-time-field span {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.weekday-toggle-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.weekday-toggle {
+  min-width: 3rem;
+  min-height: 2.2rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid rgba(42, 47, 58, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #2a3139;
+}
+
+.weekday-toggle-active {
+  border-color: rgba(18, 111, 255, 0.22);
+  background: rgba(20, 113, 255, 0.12);
+  color: #0b55cf;
+}
+
+.schedule-time-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.schedule-time-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.schedule-time-input {
+  max-width: none;
+}
+
+.schedule-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .permission-note {
   margin: 0;
   color: #68707c;
@@ -318,6 +433,16 @@ button {
   backdrop-filter: blur(16px);
   color: #616874;
   font-size: 0.84rem;
+}
+
+@media (max-width: 720px) {
+  .schedule-range-header {
+    flex-direction: column;
+  }
+
+  .schedule-time-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .footer-strip strong {

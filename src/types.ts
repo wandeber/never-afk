@@ -18,10 +18,25 @@ export type SafeKeyPreset =
 
 export type ActivityMethod = "keyboard";
 export type SaveState = "idle" | "saving" | "saved";
+export type ScheduleWeekday =
+  | "Mon"
+  | "Tue"
+  | "Wed"
+  | "Thu"
+  | "Fri"
+  | "Sat"
+  | "Sun";
+
+export type ScheduleRange = {
+  daysOfWeek: ScheduleWeekday[];
+  startMinutes: number;
+  endMinutes: number;
+};
 
 export type EnginePhase =
   | "disabled"
   | "paused"
+  | "scheduledOff"
   | "waitingQuiet"
   | "observing"
   | "error";
@@ -37,6 +52,8 @@ export type AppConfig = {
   quietPeriodSeconds: number;
   idleConfirmationPeriodSeconds: number;
   startAtLogin: boolean;
+  scheduleEnabled: boolean;
+  scheduleRanges: ScheduleRange[];
   activityMethod: ActivityMethod;
   selectedKey: SafeKeyPreset;
   showLastEventInMenuBar: boolean;
@@ -51,6 +68,7 @@ export type RuntimeSnapshot = {
   detailLabel: string;
   resolvedInputLabel: string;
   nextCheckInSeconds: number | null;
+  nextRelevantEpochMs: number | null;
   pausedUntilEpochMs: number | null;
   lastFakeInputEpochMs: number | null;
   lastError: string | null;

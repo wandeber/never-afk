@@ -11,7 +11,8 @@ Build from source at your own risk.
 ## What It Does
 
 `never-afk` waits through a configurable quiet period, confirms that there has been no recent
-human input, and only then sends a minimal synthetic keyboard event.
+human input, and only then sends a minimal synthetic keyboard event. Automatic activity can also
+be limited to one or more weekly schedule ranges.
 
 The intended behavior is:
 
@@ -19,6 +20,7 @@ The intended behavior is:
 2. Observe for `idle_confirmation_period`.
 3. Restart the cycle if human input is detected.
 4. Send the configured synthetic key press if the machine is still idle.
+5. Optionally run only inside the configured weekly schedule ranges.
 
 ## Current Stack
 

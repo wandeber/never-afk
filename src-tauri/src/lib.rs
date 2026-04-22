@@ -1,13 +1,14 @@
 mod config;
 mod engine;
 mod platform;
+mod schedule;
 mod state;
 mod tray;
 
 use config::AppConfig;
 use engine::RuntimeSnapshot;
 use state::{FrontendState, SharedAppContext};
-use tauri::{ActivationPolicy, Manager, State, WindowEvent};
+use tauri::{ActivationPolicy, Manager, RunEvent, State, WindowEvent};
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri_plugin_autostart::MacosLauncher;
@@ -117,7 +118,15 @@ pub fn run() {
             reveal_synthetic_input_access_target_command
         ]);
 
-    builder
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    let app = builder
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let RunEvent::Resumed = event {
+            if let Some(context) = app_handle.try_state::<SharedAppContext>() {
+                context.wake_engine();
+            }
+        }
+    });
 }

@@ -127,7 +127,11 @@ impl AppContext {
     }
 
     pub fn runtime_snapshot(&self) -> RuntimeSnapshot {
-        self.runtime_snapshot.lock().unwrap().clone()
+        let mut snapshot = self.runtime_snapshot.lock().unwrap().clone();
+        snapshot.next_check_in_seconds = snapshot
+            .next_relevant_epoch_ms
+            .map(|deadline| remaining_seconds_until_epoch(self.now_epoch_ms(), deadline));
+        snapshot
     }
 
     pub fn update_runtime_snapshot(&self, update: impl FnOnce(&mut RuntimeSnapshot)) {
@@ -222,6 +226,38 @@ impl AppContext {
             .unwrap();
     }
 
+    pub fn wait_until_wake(&self, deadline_epoch_ms: Option<u64>) {
+        let (lock, cvar) = &*self.wake_signal;
+        let generation = lock.lock().unwrap();
+        let current = *generation;
+
+        match deadline_epoch_ms {
+            Some(deadline_epoch_ms) => {
+                let remaining_ms = deadline_epoch_ms.saturating_sub(self.now_epoch_ms());
+                if remaining_ms == 0 {
+                    return;
+                }
+
+                // This is the backend equivalent of a cancellable setTimeout:
+                // sleep until the next schedule boundary unless a config change,
+                // pause toggle or manual wake increments the signal generation.
+                let _ = cvar
+                    .wait_timeout_while(
+                        generation,
+                        Duration::from_millis(remaining_ms),
+                        |pending| *pending == current,
+                    )
+                    .unwrap();
+            }
+            None => {
+                drop(
+                    cvar.wait_while(generation, |pending| *pending == current)
+                        .unwrap(),
+                );
+            }
+        }
+    }
+
     pub fn now_epoch_ms(&self) -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -252,6 +288,8 @@ impl AppContext {
             snapshot.last_error = None;
             snapshot.resolved_input_label = input.display_label.clone();
             snapshot.detail_label = format!("Sent {} via {}.", input.display_label, reason);
+            snapshot.next_check_in_seconds = None;
+            snapshot.next_relevant_epoch_ms = None;
         });
         self.refresh_tray();
 
@@ -351,6 +389,15 @@ impl AppContext {
             .hide()
             .map_err(|error| format!("Failed to hide the settings window: {error}"))?;
         Ok(())
+    }
+}
+
+fn remaining_seconds_until_epoch(now_epoch_ms: u64, deadline_epoch_ms: u64) -> u64 {
+    let remaining_ms = deadline_epoch_ms.saturating_sub(now_epoch_ms);
+    if remaining_ms == 0 {
+        0
+    } else {
+        remaining_ms.saturating_add(999) / 1000
     }
 }
 

@@ -30,16 +30,14 @@ impl<R: Runtime> TrayHandles<R> {
         config: &crate::config::AppConfig,
         snapshot: &RuntimeSnapshot,
     ) -> Result<(), String> {
-        let next_check_text = match snapshot.next_check_in_seconds {
-            Some(seconds) => format!("Next check in {}s", seconds.max(1)),
-            None => "Next check in -".to_string(),
-        };
+        let next_check_text = format_next_check_menu_text(config, snapshot);
         let last_event_text = format_last_event_menu_text(snapshot.last_fake_input_epoch_ms);
 
         let status_text = match snapshot.phase {
             EnginePhase::WaitingQuiet => "Status: Enabled".to_string(),
             EnginePhase::Observing => "Status: Observing".to_string(),
             EnginePhase::Paused => "Status: Paused".to_string(),
+            EnginePhase::ScheduledOff => "Status: Outside schedule".to_string(),
             EnginePhase::Disabled => "Status: Disabled".to_string(),
             EnginePhase::Error => "Status: Driver error".to_string(),
         };
@@ -74,6 +72,36 @@ fn format_last_event_menu_text(last_fake_input_epoch_ms: Option<u64>) -> String 
     }
 }
 
+fn format_next_check_menu_text(
+    config: &crate::config::AppConfig,
+    snapshot: &RuntimeSnapshot,
+) -> String {
+    match snapshot.phase {
+        EnginePhase::ScheduledOff => match snapshot
+            .next_relevant_epoch_ms
+            .and_then(format_weekday_time)
+        {
+            Some(label) => format!("Next range: {label}"),
+            None if config.schedule_enabled && config.schedule_ranges.is_empty() => {
+                "Next range: add a range".to_string()
+            }
+            None => "Next range: -".to_string(),
+        },
+        EnginePhase::Paused => match snapshot
+            .paused_until_epoch_ms
+            .or(snapshot.next_relevant_epoch_ms)
+            .and_then(format_timestamp_for_menu)
+        {
+            Some(label) => format!("Resumes: {label}"),
+            None => "Resumes: -".to_string(),
+        },
+        _ => match snapshot.next_check_in_seconds {
+            Some(seconds) => format!("Next check in {}s", seconds.max(1)),
+            None => "Next check in -".to_string(),
+        },
+    }
+}
+
 fn format_last_event_title(
     last_fake_input_epoch_ms: Option<u64>,
     show_last_event_in_menu_bar: bool,
@@ -90,6 +118,11 @@ fn format_timestamp_for_menu(epoch_ms: u64) -> Option<String> {
     // exact day and minute when the last synthetic event was sent.
     let timestamp = Local.timestamp_millis_opt(epoch_ms as i64).single()?;
     Some(timestamp.format("%Y-%m-%d %H:%M").to_string())
+}
+
+fn format_weekday_time(epoch_ms: u64) -> Option<String> {
+    let timestamp = Local.timestamp_millis_opt(epoch_ms as i64).single()?;
+    Some(timestamp.format("%a %H:%M").to_string())
 }
 
 fn format_timestamp_for_title(last_fake_input_epoch_ms: Option<u64>) -> Option<String> {

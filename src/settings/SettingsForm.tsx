@@ -6,6 +6,7 @@ import type {
   SaveState,
   SyntheticInputAccessState,
 } from "../types";
+import { SchedulePreferences } from "./SchedulePreferences";
 
 type SettingsFormProps = {
   config: AppConfig;
@@ -38,11 +39,7 @@ function updateNumberField(value: string, fallback: number | null = null) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function PreferenceRow({
-  title,
-  description,
-  children,
-}: PreferenceRowProps) {
+function PreferenceRow({ title, description, children }: PreferenceRowProps) {
   // Keep each setting in a strict label/control row so the pane scans like a
   // desktop preferences window instead of a stacked web form.
   return (
@@ -165,6 +162,8 @@ export const SettingsForm = memo(function SettingsForm({
         </div>
       </section>
 
+      <SchedulePreferences config={config} onChange={onChange} />
+
       <section className="preferences-group">
         <div className="preferences-group-header">
           <h2>Delays</h2>
@@ -185,10 +184,11 @@ export const SettingsForm = memo(function SettingsForm({
                 onChange={(event) =>
                   onChange({
                     ...config,
-                    quietPeriodSeconds: updateNumberField(
-                      event.currentTarget.value,
-                      config.quietPeriodSeconds,
-                    ) ?? config.quietPeriodSeconds,
+                    quietPeriodSeconds:
+                      updateNumberField(
+                        event.currentTarget.value,
+                        config.quietPeriodSeconds,
+                      ) ?? config.quietPeriodSeconds,
                   })
                 }
               />
@@ -209,10 +209,11 @@ export const SettingsForm = memo(function SettingsForm({
                 onChange={(event) =>
                   onChange({
                     ...config,
-                    idleConfirmationPeriodSeconds: updateNumberField(
-                      event.currentTarget.value,
-                      config.idleConfirmationPeriodSeconds,
-                    ) ?? config.idleConfirmationPeriodSeconds,
+                    idleConfirmationPeriodSeconds:
+                      updateNumberField(
+                        event.currentTarget.value,
+                        config.idleConfirmationPeriodSeconds,
+                      ) ?? config.idleConfirmationPeriodSeconds,
                   })
                 }
               />
@@ -250,7 +251,9 @@ export const SettingsForm = memo(function SettingsForm({
                   value={option.id}
                   disabled={!option.supported}
                 >
-                  {option.supported ? option.label : `${option.label} (unsupported here)`}
+                  {option.supported
+                    ? option.label
+                    : `${option.label} (unsupported here)`}
                 </option>
               ))}
             </select>
@@ -292,7 +295,9 @@ export const SettingsForm = memo(function SettingsForm({
               onChange={(event) =>
                 onChange({
                   ...config,
-                  customInputValue: updateNumberField(event.currentTarget.value),
+                  customInputValue: updateNumberField(
+                    event.currentTarget.value,
+                  ),
                 })
               }
             />
@@ -304,7 +309,10 @@ export const SettingsForm = memo(function SettingsForm({
         <section className="preferences-group">
           <div className="preferences-group-header">
             <h2>Permissions</h2>
-            <p>macOS needs accessibility access before synthetic keys can reach other apps.</p>
+            <p>
+              macOS needs accessibility access before synthetic keys can reach
+              other apps.
+            </p>
           </div>
 
           <div className="preferences-list">
@@ -346,7 +354,9 @@ export const SettingsForm = memo(function SettingsForm({
                 title="Current executable"
                 description="This exact executable is the one macOS must allow in Accessibility for the current app session."
               >
-                <code className="path-chip">{syntheticInputAccess.targetPath}</code>
+                <code className="path-chip">
+                  {syntheticInputAccess.targetPath}
+                </code>
               </PreferenceRow>
             ) : null}
           </div>

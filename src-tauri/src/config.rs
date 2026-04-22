@@ -1,3 +1,4 @@
+use chrono::Weekday;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Wry};
 use tauri_plugin_store::StoreExt;
@@ -181,6 +182,92 @@ pub struct PlatformKeyMapping {
     pub hid_usage_code: Option<u16>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum ScheduleWeekday {
+    Mon,
+    Tue,
+    Wed,
+    Thu,
+    Fri,
+    Sat,
+    Sun,
+}
+
+impl ScheduleWeekday {
+    pub fn sort_index(self) -> usize {
+        match self {
+            Self::Mon => 0,
+            Self::Tue => 1,
+            Self::Wed => 2,
+            Self::Thu => 3,
+            Self::Fri => 4,
+            Self::Sat => 5,
+            Self::Sun => 6,
+        }
+    }
+
+    pub fn from_chrono(weekday: Weekday) -> Self {
+        match weekday {
+            Weekday::Mon => Self::Mon,
+            Weekday::Tue => Self::Tue,
+            Weekday::Wed => Self::Wed,
+            Weekday::Thu => Self::Thu,
+            Weekday::Fri => Self::Fri,
+            Weekday::Sat => Self::Sat,
+            Weekday::Sun => Self::Sun,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduleRange {
+    pub days_of_week: Vec<ScheduleWeekday>,
+    pub start_minutes: u16,
+    pub end_minutes: u16,
+}
+
+impl ScheduleRange {
+    pub const MAX_MINUTE_OF_DAY: u16 = 23 * 60 + 59;
+
+    pub fn validate_and_normalize(&mut self, index: usize) -> Result<(), String> {
+        if self.days_of_week.is_empty() {
+            return Err(format!(
+                "Schedule range {} must include at least one weekday.",
+                index + 1
+            ));
+        }
+
+        if self.start_minutes > Self::MAX_MINUTE_OF_DAY {
+            return Err(format!(
+                "Schedule range {} starts outside the valid 00:00-23:59 day window.",
+                index + 1
+            ));
+        }
+
+        if self.end_minutes > Self::MAX_MINUTE_OF_DAY {
+            return Err(format!(
+                "Schedule range {} ends outside the valid 00:00-23:59 day window.",
+                index + 1
+            ));
+        }
+
+        if self.end_minutes <= self.start_minutes {
+            return Err(format!(
+                "Schedule range {} must end after it starts. Overnight ranges are not supported.",
+                index + 1
+            ));
+        }
+
+        // Ranges are persisted as a stable Monday-first set so repeated saves do
+        // not shuffle the JSON representation or create duplicate weekdays.
+        self.days_of_week.sort_by_key(|day| day.sort_index());
+        self.days_of_week.dedup();
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
@@ -188,6 +275,10 @@ pub struct AppConfig {
     pub quiet_period_seconds: u64,
     pub idle_confirmation_period_seconds: u64,
     pub start_at_login: bool,
+    #[serde(default)]
+    pub schedule_enabled: bool,
+    #[serde(default)]
+    pub schedule_ranges: Vec<ScheduleRange>,
     pub activity_method: ActivityMethod,
     pub selected_key: SafeKeyPreset,
     #[serde(default = "default_show_last_event_in_menu_bar")]
@@ -208,6 +299,8 @@ impl Default for AppConfig {
             quiet_period_seconds: 120,
             idle_confirmation_period_seconds: 120,
             start_at_login: false,
+            schedule_enabled: false,
+            schedule_ranges: Vec::new(),
             activity_method: ActivityMethod::Keyboard,
             selected_key: SafeKeyPreset::F15,
             show_last_event_in_menu_bar: default_show_last_event_in_menu_bar(),
@@ -226,6 +319,10 @@ impl AppConfig {
 
         if self.idle_confirmation_period_seconds == 0 {
             return Err("Idle confirmation period must be greater than zero seconds.".into());
+        }
+
+        for (index, range) in self.schedule_ranges.iter_mut().enumerate() {
+            range.validate_and_normalize(index)?;
         }
 
         if self.custom_input_enabled {
@@ -440,7 +537,7 @@ pub fn save_last_fake_input_epoch_ms(
 
 #[cfg(test)]
 mod tests {
-    use super::{AppConfig, PlatformKind, SafeKeyPreset};
+    use super::{AppConfig, PlatformKind, SafeKeyPreset, ScheduleRange, ScheduleWeekday};
     use serde_json::json;
 
     #[test]
@@ -551,5 +648,70 @@ mod tests {
         .unwrap();
 
         assert!(decoded.show_last_event_in_menu_bar);
+        assert!(!decoded.schedule_enabled);
+        assert!(decoded.schedule_ranges.is_empty());
+    }
+
+    #[test]
+    fn rejects_schedule_ranges_without_weekdays() {
+        let config = AppConfig {
+            schedule_enabled: true,
+            schedule_ranges: vec![ScheduleRange {
+                days_of_week: Vec::new(),
+                start_minutes: 9 * 60,
+                end_minutes: 17 * 60,
+            }],
+            ..AppConfig::default()
+        };
+
+        let result = config.validate_and_normalize(PlatformKind::Macos);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_overnight_schedule_ranges() {
+        let config = AppConfig {
+            schedule_enabled: true,
+            schedule_ranges: vec![ScheduleRange {
+                days_of_week: vec![ScheduleWeekday::Mon],
+                start_minutes: 22 * 60,
+                end_minutes: 8 * 60,
+            }],
+            ..AppConfig::default()
+        };
+
+        let result = config.validate_and_normalize(PlatformKind::Macos);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn normalizes_schedule_weekdays_into_stable_order() {
+        let config = AppConfig {
+            schedule_enabled: true,
+            schedule_ranges: vec![ScheduleRange {
+                days_of_week: vec![
+                    ScheduleWeekday::Fri,
+                    ScheduleWeekday::Mon,
+                    ScheduleWeekday::Fri,
+                    ScheduleWeekday::Wed,
+                ],
+                start_minutes: 8 * 60,
+                end_minutes: 9 * 60,
+            }],
+            ..AppConfig::default()
+        };
+
+        let normalized = config.validate_and_normalize(PlatformKind::Macos).unwrap();
+
+        assert_eq!(
+            normalized.schedule_ranges[0].days_of_week,
+            vec![
+                ScheduleWeekday::Mon,
+                ScheduleWeekday::Wed,
+                ScheduleWeekday::Fri
+            ]
+        );
     }
 }
