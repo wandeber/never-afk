@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "version-*.*.*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-release:
+    name: Verify release tag and frontend tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release version matches the repository manifests
+        run: node scripts/verify-release-version.mjs "${GITHUB_REF_NAME}"
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
+      - name: Run frontend tests
+        run: npm run test -- --run
+
+  publish-release:
+    name: Publish ${{ matrix.label }}
+    needs: verify-release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS Apple Silicon
+            runner: macos-15
+            bundleArgs: --bundles dmg,app
+          - label: macOS Intel
+            runner: macos-15-intel
+            bundleArgs: --bundles dmg,app
+          - label: Windows x64
+            runner: windows-latest
+            bundleArgs: --bundles msi,nsis
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build bundles and publish the GitHub Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: never-afk ${{ github.ref_name }}
+          releaseBody: |
+            Automatic GitHub release built from tag `${{ github.ref_name }}`.
+
+            macOS:
+            - Download the DMG and move `never-afk.app` to `Applications`.
+            - Because these builds are not shipped with a Developer ID distribution signature or notarization, Gatekeeper may require **Open Anyway** the first time you launch them.
+
+            Windows:
+            - Download the `.msi` or `.exe` installer.
+            - SmartScreen may warn because the installer is unsigned.
+          generateReleaseNotes: true
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.bundleArgs }}

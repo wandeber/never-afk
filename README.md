@@ -2,7 +2,8 @@
 
 Personal utility.
 
-No binaries are provided.
+Source builds remain the primary path.
+Optional GitHub Release binaries are provided for personal convenience only.
 No support is offered.
 macOS and Windows are the intended targets.
 Linux is not supported.
@@ -56,3 +57,38 @@ npm run tauri dev
 
 Use a current stable Rust toolchain. The repository includes `rust-toolchain.toml` to make that
 expectation explicit.
+
+## Releasing
+
+GitHub Releases are published only when you push a tag in the `version-x.x.x` format.
+
+Example:
+
+```bash
+git tag version-0.1.0
+git push origin version-0.1.0
+```
+
+Before tagging a release, make sure the version matches in all three places:
+
+- `package.json`
+- `src-tauri/Cargo.toml`
+- `src-tauri/tauri.conf.json`
+
+The release workflow checks that automatically and refuses to publish if the
+tag version and manifest versions do not match.
+
+If the workflow cannot create or update a release, enable GitHub Actions
+workflow permissions with repository write access for `GITHUB_TOKEN`.
+
+Release assets currently target:
+
+- macOS: `DMG` plus the `.app` bundle
+- Windows: `MSI` plus the NSIS `.exe` installer
+
+These builds are intended for personal convenience rather than full commercial
+distribution. They are not signed with a `Developer ID Application` certificate
+and are not notarized, so:
+
+- macOS may require **Open Anyway** the first time the app is launched
+- Windows SmartScreen may show an unsigned publisher warning
