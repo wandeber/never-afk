@@ -142,6 +142,26 @@ export const SettingsForm = memo(function SettingsForm({
               <span>On</span>
             </label>
           </PreferenceRow>
+
+          <PreferenceRow
+            title="Show last event in menu bar"
+            description="Display the latest synthetic-event timestamp next to the tray icon."
+          >
+            <label className="checkbox-inline">
+              <input
+                className="preference-checkbox"
+                type="checkbox"
+                checked={config.showLastEventInMenuBar}
+                onChange={(event) =>
+                  onChange({
+                    ...config,
+                    showLastEventInMenuBar: event.currentTarget.checked,
+                  })
+                }
+              />
+              <span>On</span>
+            </label>
+          </PreferenceRow>
         </div>
       </section>
 

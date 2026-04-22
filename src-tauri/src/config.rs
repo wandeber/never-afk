@@ -190,9 +190,15 @@ pub struct AppConfig {
     pub start_at_login: bool,
     pub activity_method: ActivityMethod,
     pub selected_key: SafeKeyPreset,
+    #[serde(default = "default_show_last_event_in_menu_bar")]
+    pub show_last_event_in_menu_bar: bool,
     pub custom_input_enabled: bool,
     pub custom_input_value: Option<u16>,
     pub platform_key_mapping: PlatformKeyMapping,
+}
+
+fn default_show_last_event_in_menu_bar() -> bool {
+    true
 }
 
 impl Default for AppConfig {
@@ -204,6 +210,7 @@ impl Default for AppConfig {
             start_at_login: false,
             activity_method: ActivityMethod::Keyboard,
             selected_key: SafeKeyPreset::F15,
+            show_last_event_in_menu_bar: default_show_last_event_in_menu_bar(),
             custom_input_enabled: false,
             custom_input_value: None,
             platform_key_mapping: PlatformKeyMapping::default(),
@@ -434,6 +441,7 @@ pub fn save_last_fake_input_epoch_ms(
 #[cfg(test)]
 mod tests {
     use super::{AppConfig, PlatformKind, SafeKeyPreset};
+    use serde_json::json;
 
     #[test]
     fn rejects_unsupported_safe_key_on_macos() {
@@ -521,5 +529,27 @@ mod tests {
         let result = config.validate_and_normalize(PlatformKind::Windows);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn defaults_last_event_visibility_when_loading_older_settings() {
+        let decoded: AppConfig = serde_json::from_value(json!({
+            "enabled": true,
+            "quietPeriodSeconds": 120,
+            "idleConfirmationPeriodSeconds": 120,
+            "startAtLogin": false,
+            "activityMethod": "keyboard",
+            "selectedKey": "F15",
+            "customInputEnabled": false,
+            "customInputValue": null,
+            "platformKeyMapping": {
+                "macosKeyCode": null,
+                "windowsVirtualKeyCode": null,
+                "hidUsageCode": null
+            }
+        }))
+        .unwrap();
+
+        assert!(decoded.show_last_event_in_menu_bar);
     }
 }

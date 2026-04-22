@@ -57,7 +57,10 @@ impl<R: Runtime> TrayHandles<R> {
             .set_checked(config.enabled)
             .map_err(|error| format!("Failed to update tray enabled state: {error}"))?;
         self.icon
-            .set_title(format_last_event_title(snapshot.last_fake_input_epoch_ms))
+            .set_title(format_last_event_title(
+                snapshot.last_fake_input_epoch_ms,
+                config.show_last_event_in_menu_bar,
+            ))
             .map_err(|error| format!("Failed to update the tray title: {error}"))?;
 
         Ok(())
@@ -71,7 +74,14 @@ fn format_last_event_menu_text(last_fake_input_epoch_ms: Option<u64>) -> String 
     }
 }
 
-fn format_last_event_title(last_fake_input_epoch_ms: Option<u64>) -> Option<String> {
+fn format_last_event_title(
+    last_fake_input_epoch_ms: Option<u64>,
+    show_last_event_in_menu_bar: bool,
+) -> Option<String> {
+    if !show_last_event_in_menu_bar {
+        return None;
+    }
+
     last_fake_input_epoch_ms.and_then(format_timestamp_for_title)
 }
 

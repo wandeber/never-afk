@@ -63,6 +63,7 @@ function makeConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     startAtLogin: false,
     activityMethod: "keyboard",
     selectedKey: "F15",
+    showLastEventInMenuBar: true,
     customInputEnabled: false,
     customInputValue: null,
     platformKeyMapping: {
@@ -272,6 +273,31 @@ describe("App", () => {
 
     await waitFor(() =>
       expect(revealSyntheticInputAccessTarget).toHaveBeenCalledTimes(1),
+    );
+  }, 10000);
+
+  it("persists the menu-bar last event visibility toggle", async () => {
+    render(<App />);
+
+    await screen.findByText("Show last event in menu bar");
+
+    const showLastEventCheckbox = screen
+      .getByText("Show last event in menu bar")
+      .closest(".preference-row")
+      ?.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+
+    expect(showLastEventCheckbox?.checked).toBe(true);
+
+    fireEvent.click(showLastEventCheckbox!);
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+    });
+
+    await waitFor(() =>
+      expect(saveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ showLastEventInMenuBar: false }),
+      ),
     );
   }, 10000);
 });

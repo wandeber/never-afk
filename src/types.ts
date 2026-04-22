@@ -39,6 +39,7 @@ export type AppConfig = {
   startAtLogin: boolean;
   activityMethod: ActivityMethod;
   selectedKey: SafeKeyPreset;
+  showLastEventInMenuBar: boolean;
   customInputEnabled: boolean;
   customInputValue: number | null;
   platformKeyMapping: PlatformKeyMapping;
