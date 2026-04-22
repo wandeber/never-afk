@@ -309,21 +309,6 @@ export const SettingsForm = memo(function SettingsForm({
 
           <div className="preferences-list">
             <PreferenceRow
-              title="Accessibility access"
-              description="Required for scheduled synthetic key presses to be delivered to the focused app."
-            >
-              <span
-                className={`permission-status ${
-                  syntheticInputAccess.granted
-                    ? "permission-status-granted"
-                    : "permission-status-missing"
-                }`}
-              >
-                {syntheticInputAccess.granted ? "Granted" : "Required"}
-              </span>
-            </PreferenceRow>
-
-            <PreferenceRow
               title="Request permission"
               description="Ask macOS for accessibility access and open the correct Settings page if approval is still needed."
             >

@@ -1,10 +1,6 @@
 import { SettingsForm } from "./settings/SettingsForm";
 import { useAppController } from "./hooks/useAppController";
-import {
-  formatPhaseLabel,
-  formatRuntimeNote,
-  formatSyntheticInputAccessLabel,
-} from "./runtimeLabels";
+import { formatRuntimeNote } from "./runtimeLabels";
 import "./App.css";
 
 function App() {
@@ -38,11 +34,6 @@ function App() {
     );
   }
 
-  const runtimePhase = runtimeSnapshot?.phase ?? "waitingQuiet";
-  const syntheticInputAccessLabel = formatSyntheticInputAccessLabel(
-    serverState.syntheticInputAccess,
-  );
-
   return (
     <main className="app-shell">
       <section className="content-shell">
@@ -54,22 +45,6 @@ function App() {
               Configure startup behavior, idle delays and the synthetic key used
               by the resident engine.
             </p>
-          </div>
-
-          <div className="toolbar-meta">
-            <span
-              aria-label={syntheticInputAccessLabel}
-              className={`access-chip ${
-                serverState.syntheticInputAccess.granted
-                  ? "access-chip-granted"
-                  : "access-chip-missing"
-              }`}
-            >
-              {syntheticInputAccessLabel}
-            </span>
-            <span className={`phase-chip phase-${runtimePhase}`}>
-              {formatPhaseLabel(runtimePhase)}
-            </span>
           </div>
         </header>
 

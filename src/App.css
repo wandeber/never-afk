@@ -70,10 +70,6 @@ button {
 }
 
 .compact-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 1rem;
   padding: 1rem 1.25rem 0.95rem;
   border-bottom: 1px solid rgba(40, 44, 53, 0.08);
   background: rgba(255, 255, 255, 0.38);
@@ -108,65 +104,6 @@ button {
   margin-top: 0.35rem;
   max-width: 38rem;
   color: #636a75;
-}
-
-.toolbar-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-}
-
-.phase-chip,
-.access-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0 0.8rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.phase-chip {
-  color: #27303a;
-  border: 1px solid rgba(50, 56, 70, 0.08);
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.access-chip {
-  border: 1px solid rgba(50, 56, 70, 0.08);
-}
-
-.access-chip-granted {
-  background: rgba(96, 181, 167, 0.18);
-  color: #175e55;
-}
-
-.access-chip-missing {
-  background: rgba(241, 178, 106, 0.24);
-  color: #8c541c;
-}
-
-.phase-waitingQuiet,
-.phase-disabled {
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.phase-observing {
-  background: rgba(96, 181, 167, 0.18);
-  color: #175e55;
-}
-
-.phase-paused {
-  background: rgba(241, 178, 106, 0.24);
-  color: #8c541c;
-}
-
-.phase-error {
-  background: rgba(227, 111, 99, 0.2);
-  color: #8f2d24;
 }
 
 .preferences-pane {
@@ -244,6 +181,7 @@ button {
 }
 
 .preference-input {
+  height: 2.45rem;
   min-height: 2.45rem;
   padding: 0.55rem 0.75rem;
   border: 1px solid rgba(42, 47, 58, 0.12);
@@ -283,29 +221,6 @@ button {
 .preference-unit {
   color: #69707b;
   white-space: nowrap;
-}
-
-.permission-status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  min-width: 96px;
-  padding: 0 0.8rem;
-  border-radius: 999px;
-  border: 1px solid rgba(50, 56, 70, 0.08);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.permission-status-granted {
-  background: rgba(96, 181, 167, 0.18);
-  color: #175e55;
-}
-
-.permission-status-missing {
-  background: rgba(241, 178, 106, 0.24);
-  color: #8c541c;
 }
 
 .secondary-button {
