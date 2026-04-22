@@ -1,50 +1,74 @@
 # never-afk
 
-Personal utility.
+`never-afk` is a lightweight menu bar utility that keeps your machine active only when it has
+actually gone idle. It waits through a quiet period, confirms that no human input has happened
+recently, and then sends a minimal synthetic key press.
 
-Source builds remain the primary path.
-Optional GitHub Release binaries are provided for personal convenience only.
-No support is offered.
-macOS and Windows are the intended targets.
-Linux is not supported.
-Build from source at your own risk.
+The result is simple: fewer false wake-ups, less unnecessary input, and a predictable background
+tool that can be limited to the exact days and time ranges where you want it running.
 
-## What It Does
+## Highlights
 
-`never-afk` waits through a configurable quiet period, confirms that there has been no recent
-human input, and only then sends a minimal synthetic keyboard event. Automatic activity can also
-be limited to one or more weekly schedule ranges.
+- Menu bar utility with a compact settings window
+- Configurable quiet period and idle confirmation period
+- Configurable synthetic key presets plus custom platform key codes
+- Weekly schedule ranges with multiple windows per day
+- Runtime status in the UI and tray
+- Start at login support on supported platforms
+- Local-first behavior with no telemetry, no network features, and no input logging
 
-The intended behavior is:
+## How It Works
 
-1. Wait `quiet_period`.
-2. Observe for `idle_confirmation_period`.
-3. Restart the cycle if human input is detected.
-4. Send the configured synthetic key press if the machine is still idle.
-5. Optionally run only inside the configured weekly schedule ranges.
+`never-afk` follows a cautious cycle before generating any synthetic input:
 
-## Current Stack
+1. Wait for the configured `quiet period`.
+2. Observe the system for the configured `idle confirmation period`.
+3. Cancel the cycle immediately if human input is detected.
+4. Send a minimal synthetic key press only if the machine is still idle.
 
-- Tauri v2
-- Rust backend
-- React + TypeScript frontend
+When a weekly schedule is enabled, the automatic cycle only runs inside the configured schedule
+ranges. Outside those ranges, the engine sleeps until the next relevant start or end boundary
+instead of polling constantly.
 
-## Repository Policy
+## Main Features
 
-- No telemetry.
-- No network features.
-- No input logging.
-- No activity history.
-- No remote crash reporting.
-- No warranty.
+### Synthetic key selection
 
-## Project Notes
+Choose from built-in presets such as function keys and modifier keys, or provide custom platform
+key codes when you need more control.
 
-- The canonical project decisions live in [docs/decisiones-never-afk.md](./docs/decisiones-never-afk.md).
-- The current repository state already includes the resident engine, tray integration, settings UI
-  and platform-specific keyboard drivers for macOS and Windows.
-- macOS safe presets currently cover `F13` through `F20`. `F21` through `F24` remain available on
-  Windows, and macOS can still use any supported custom key code through the advanced input path.
+### Weekly schedule ranges
+
+Create as many schedule ranges as you need:
+
+- different ranges on different weekdays
+- multiple active windows on the same day
+- exact start and end times for each range
+
+This is useful when you only want `never-afk` active during specific working blocks instead of the
+whole day.
+
+### Persistent tray status
+
+The tray/menu bar reflects the current engine state and can optionally show the timestamp of the
+last synthetic event.
+
+### Privacy-first behavior
+
+`never-afk` is intentionally small in scope:
+
+- no telemetry
+- no remote services
+- no input history
+- no activity logging
+
+## Platform Notes
+
+- macOS and Windows are the intended targets.
+- Linux is not supported.
+- macOS safe presets currently cover `F13` through `F20`.
+- `F21` through `F24` remain available on Windows.
+- macOS can still use supported custom key codes through the advanced input path.
 
 ## Development
 
@@ -58,7 +82,7 @@ npm run tauri dev
 Use a current stable Rust toolchain. The repository includes `rust-toolchain.toml` to make that
 expectation explicit.
 
-## Releasing
+## Releases
 
 GitHub Releases are published only when you push a tag in the `version-x.x.x` format.
 
@@ -75,20 +99,23 @@ Before tagging a release, make sure the version matches in all three places:
 - `src-tauri/Cargo.toml`
 - `src-tauri/tauri.conf.json`
 
-The release workflow checks that automatically and refuses to publish if the
-tag version and manifest versions do not match.
-
-If the workflow cannot create or update a release, enable GitHub Actions
-workflow permissions with repository write access for `GITHUB_TOKEN`.
+The release workflow checks that automatically and refuses to publish if the tag version and
+manifest versions do not match.
 
 Release assets currently target:
 
-- macOS: `DMG` plus the `.app` bundle
-- Windows: `MSI` plus the NSIS `.exe` installer
+- macOS Apple Silicon: `DMG`
+- Windows x64: `EXE`
 
-These builds are intended for personal convenience rather than full commercial
-distribution. They are not signed with a `Developer ID Application` certificate
-and are not notarized, so:
+These builds are intended for personal convenience rather than full commercial distribution. They
+are not signed with a `Developer ID Application` certificate and are not notarized, so:
 
 - macOS may require **Open Anyway** the first time the app is launched
 - Windows SmartScreen may show an unsigned publisher warning
+
+If the workflow cannot create or update a release, enable GitHub Actions workflow permissions with
+repository write access for `GITHUB_TOKEN`.
+
+## More Context
+
+The canonical project decisions live in [docs/decisiones-never-afk.md](./docs/decisiones-never-afk.md).
