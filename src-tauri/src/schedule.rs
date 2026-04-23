@@ -308,6 +308,28 @@ mod tests {
     }
 
     #[test]
+    fn start_of_range_is_inclusive() {
+        let mut config = base_config();
+        config.schedule_ranges = vec![weekday_range(vec![ScheduleWeekday::Wed], 9 * 60, 12 * 60)];
+
+        let now = madrid_like_offset()
+            .with_ymd_and_hms(2026, 4, 22, 9, 0, 0)
+            .unwrap();
+        let state = evaluate_schedule_at(&config, now);
+
+        assert_eq!(
+            state,
+            ScheduleState::Active {
+                active_until_epoch_ms: epoch_ms(
+                    madrid_like_offset()
+                        .with_ymd_and_hms(2026, 4, 22, 12, 0, 0)
+                        .unwrap()
+                ),
+            }
+        );
+    }
+
+    #[test]
     fn end_of_range_is_exclusive() {
         let mut config = base_config();
         config.schedule_ranges = vec![weekday_range(vec![ScheduleWeekday::Wed], 9 * 60, 12 * 60)];
