@@ -1,4 +1,6 @@
 use chrono::{Local, TimeZone};
+use std::sync::Mutex;
+use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItem, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Runtime, Wry};
@@ -18,6 +20,9 @@ const QUIT_ITEM_ID: &str = "quit";
 
 pub struct TrayHandles<R: Runtime> {
     icon: TrayIcon<R>,
+    active_icon: Image<'static>,
+    inactive_icon: Image<'static>,
+    last_icon_active: Mutex<Option<bool>>,
     status: MenuItem<R>,
     next_check: MenuItem<R>,
     last_event: MenuItem<R>,
@@ -32,6 +37,7 @@ impl<R: Runtime> TrayHandles<R> {
     ) -> Result<(), String> {
         let next_check_text = format_next_check_menu_text(config, snapshot);
         let last_event_text = format_last_event_menu_text(snapshot.last_fake_input_epoch_ms);
+        let icon_active = uses_active_tray_icon(snapshot);
 
         let status_text = match snapshot.phase {
             EnginePhase::WaitingQuiet => "Status: Enabled".to_string(),
@@ -54,12 +60,36 @@ impl<R: Runtime> TrayHandles<R> {
         self.enabled
             .set_checked(config.enabled)
             .map_err(|error| format!("Failed to update tray enabled state: {error}"))?;
+        self.refresh_icon(icon_active)?;
         self.icon
             .set_title(Some(format_last_event_title(
                 snapshot.last_fake_input_epoch_ms,
                 config.show_last_event_in_menu_bar,
             )))
             .map_err(|error| format!("Failed to update the tray title: {error}"))?;
+
+        Ok(())
+    }
+
+    fn refresh_icon(&self, icon_active: bool) -> Result<(), String> {
+        let mut last_icon_active = self.last_icon_active.lock().unwrap();
+        if last_icon_active.is_some_and(|current| current == icon_active) {
+            return Ok(());
+        }
+
+        // Tray refreshes can happen frequently while the engine is observing.
+        // Keeping the last applied state avoids repeatedly sending the same
+        // image to the OS when only the text labels changed.
+        let next_icon = if icon_active {
+            self.active_icon.clone()
+        } else {
+            self.inactive_icon.clone()
+        };
+
+        self.icon
+            .set_icon(Some(next_icon))
+            .map_err(|error| format!("Failed to update the tray icon: {error}"))?;
+        *last_icon_active = Some(icon_active);
 
         Ok(())
     }
@@ -134,9 +164,17 @@ fn format_timestamp_for_title(last_fake_input_epoch_ms: Option<u64>) -> Option<S
     Some(timestamp.format("%d/%m %H:%M").to_string())
 }
 
+fn uses_active_tray_icon(snapshot: &RuntimeSnapshot) -> bool {
+    matches!(
+        snapshot.phase,
+        EnginePhase::WaitingQuiet | EnginePhase::Observing
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use super::format_last_event_title;
+    use super::{format_last_event_title, uses_active_tray_icon};
+    use crate::engine::{EnginePhase, RuntimeSnapshot};
 
     #[test]
     fn clears_menu_bar_title_when_visibility_is_disabled() {
@@ -146,6 +184,23 @@ mod tests {
     #[test]
     fn clears_menu_bar_title_when_no_event_is_available() {
         assert_eq!(format_last_event_title(None, true), "");
+    }
+
+    #[test]
+    fn uses_active_tray_icon_only_while_automatic_engine_can_run() {
+        let mut snapshot = RuntimeSnapshot::bootstrap("F15".into(), None);
+
+        snapshot.phase = EnginePhase::WaitingQuiet;
+        assert!(uses_active_tray_icon(&snapshot));
+
+        snapshot.phase = EnginePhase::Observing;
+        assert!(uses_active_tray_icon(&snapshot));
+
+        snapshot.phase = EnginePhase::ScheduledOff;
+        assert!(!uses_active_tray_icon(&snapshot));
+
+        snapshot.phase = EnginePhase::Paused;
+        assert!(!uses_active_tray_icon(&snapshot));
     }
 }
 
@@ -205,13 +260,12 @@ pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, Strin
         .build()
         .map_err(|error| format!("Failed to build the tray menu: {error}"))?;
 
-    let icon = app_handle
-        .default_window_icon()
-        .cloned()
-        .ok_or_else(|| "The application icon is not available.".to_string())?;
+    let active_icon = load_tray_icon(include_bytes!("../icons/tray-active.png"), "active")?;
+    let inactive_icon = load_tray_icon(include_bytes!("../icons/tray-inactive.png"), "inactive")?;
 
     let icon = TrayIconBuilder::with_id("main")
-        .icon(icon)
+        .icon(inactive_icon.clone())
+        .icon_as_template(false)
         .tooltip("never-afk")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -220,11 +274,19 @@ pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, Strin
 
     Ok(TrayHandles {
         icon,
+        active_icon,
+        inactive_icon,
+        last_icon_active: Mutex::new(None),
         status,
         next_check,
         last_event,
         enabled,
     })
+}
+
+fn load_tray_icon(bytes: &[u8], label: &str) -> Result<Image<'static>, String> {
+    Image::from_bytes(bytes)
+        .map_err(|error| format!("Failed to load the {label} tray icon: {error}"))
 }
 
 pub fn handle_menu_event(context: SharedAppContext, item_id: &str) -> Result<(), String> {
