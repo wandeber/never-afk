@@ -119,9 +119,12 @@ fn engine_loop(context: SharedAppContext) {
 
         let schedule_state = evaluate_schedule(&config);
         if !schedule_state.automatic_activity_allowed() {
+            let next_relevant_epoch_ms = schedule_state.next_relevant_epoch_ms();
             // Outside schedule we do not keep a watchdog loop alive. Instead we
             // publish the next relevant boundary and sleep until either that
-            // deadline or an explicit wake signal arrives.
+            // deadline or an explicit wake signal arrives. We intentionally do
+            // not hold a macOS power assertion here: outside schedule, the
+            // machine should be allowed to idle-sleep normally.
             let detail_label = match schedule_state {
                 ScheduleState::Empty => {
                     "Automatic activity is off until at least one schedule range is added."
@@ -141,27 +144,43 @@ fn engine_loop(context: SharedAppContext) {
                 snapshot.status_label = "Outside schedule".into();
                 snapshot.detail_label = detail_label;
                 snapshot.resolved_input_label = resolved_input_label.clone();
-                snapshot.next_check_in_seconds =
-                    schedule_state.next_relevant_epoch_ms().map(|deadline| {
-                        remaining_seconds_until_epoch(context.now_epoch_ms(), deadline)
-                    });
-                snapshot.next_relevant_epoch_ms = schedule_state.next_relevant_epoch_ms();
+                snapshot.next_check_in_seconds = next_relevant_epoch_ms.map(|deadline| {
+                    remaining_seconds_until_epoch(context.now_epoch_ms(), deadline)
+                });
+                snapshot.next_relevant_epoch_ms = next_relevant_epoch_ms;
                 snapshot.paused_until_epoch_ms = context.pause_until_epoch_ms();
                 snapshot.last_error = None;
             });
             context.refresh_tray();
-            context.wait_until_wake(schedule_state.next_relevant_epoch_ms());
+            context.wait_until_wake(next_relevant_epoch_ms);
             continue;
         }
 
         let config_generation = context.config_generation();
         let active_range_end_epoch_ms = schedule_state.active_until_epoch_ms();
+        let (active_sleep_guard, active_sleep_error) = if active_range_end_epoch_ms.is_some() {
+            match context.prevent_idle_sleep(
+                    "never-afk is inside a scheduled activity range",
+                ) {
+                    Ok(guard) => (Some(guard), None),
+                    Err(error) => (
+                        None,
+                        Some(format!(
+                            "Sleep prevention failed while inside schedule: {error}. The Mac may sleep before this range ends."
+                        )),
+                    ),
+                }
+        } else {
+            (None, None)
+        };
+
         if wait_for_quiet_period(
             &context,
             &config,
             &resolved_input_label,
             config_generation,
             active_range_end_epoch_ms,
+            active_sleep_error.as_deref(),
         )
         .is_err()
         {
@@ -178,6 +197,7 @@ fn engine_loop(context: SharedAppContext) {
             &resolved_input_label,
             config_generation,
             active_range_end_epoch_ms,
+            active_sleep_error.as_deref(),
         )
         .is_err()
         {
@@ -192,6 +212,8 @@ fn engine_loop(context: SharedAppContext) {
             record_driver_error(&context, resolved_input_label, error);
             context.wait_for_signal(ERROR_BACKOFF);
         }
+
+        drop(active_sleep_guard);
     }
 }
 
@@ -201,6 +223,7 @@ fn wait_for_quiet_period(
     resolved_input_label: &str,
     config_generation: u64,
     active_range_end_epoch_ms: Option<u64>,
+    sleep_prevention_error: Option<&str>,
 ) -> Result<(), ()> {
     let started_at = std::time::Instant::now();
     let quiet_deadline_epoch_ms = context
@@ -235,7 +258,9 @@ fn wait_for_quiet_period(
             snapshot.next_check_in_seconds = next_check_in_seconds.or(Some(remaining));
             snapshot.next_relevant_epoch_ms = next_relevant_epoch_ms;
             snapshot.paused_until_epoch_ms = context.pause_until_epoch_ms();
-            snapshot.last_error = None;
+            if let Some(error) = sleep_prevention_error {
+                snapshot.last_error = Some(error.to_string());
+            }
         });
         context.refresh_tray();
 
@@ -261,6 +286,7 @@ fn observe_idle_window(
     resolved_input_label: &str,
     config_generation: u64,
     active_range_end_epoch_ms: Option<u64>,
+    sleep_prevention_error: Option<&str>,
 ) -> Result<(), ()> {
     let started_at = std::time::Instant::now();
     let observation_deadline_epoch_ms = context
@@ -300,7 +326,9 @@ fn observe_idle_window(
             snapshot.next_check_in_seconds = next_check_in_seconds.or(Some(remaining.max(1)));
             snapshot.next_relevant_epoch_ms = next_relevant_epoch_ms;
             snapshot.paused_until_epoch_ms = context.pause_until_epoch_ms();
-            snapshot.last_error = None;
+            if let Some(error) = sleep_prevention_error {
+                snapshot.last_error = Some(error.to_string());
+            }
         });
         context.refresh_tray();
 
@@ -351,6 +379,7 @@ fn record_driver_error(
     resolved_input_label: impl Into<String>,
     error: String,
 ) {
+    context.persist_last_driver_error(&error);
     context.update_runtime_snapshot(|snapshot| {
         snapshot.phase = EnginePhase::Error;
         snapshot.status_label = "Driver error".into();

@@ -107,6 +107,18 @@ pub fn run() {
             context.set_tray_handles(tray_handles);
             context.refresh_tray();
 
+            #[cfg(target_os = "macos")]
+            {
+                let wake_context = context.clone();
+                if let Err(error) = platform::spawn_system_wake_listener(move || {
+                    wake_context.wake_engine();
+                }) {
+                    context.update_runtime_snapshot(|snapshot| {
+                        snapshot.last_error = Some(error);
+                    });
+                }
+            }
+
             app.manage(context.clone());
             engine::spawn_engine(context).map_err(boxed_error)?;
 

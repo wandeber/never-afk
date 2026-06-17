@@ -9,12 +9,13 @@ use tauri::{AppHandle, Manager, Wry};
 use std::process::Command;
 
 use crate::config::{
-    load_last_fake_input_epoch_ms, load_persisted_config, safe_key_options,
+    load_last_fake_input_epoch_ms, load_persisted_config, safe_key_options, save_last_driver_error,
     save_last_fake_input_epoch_ms, save_persisted_config, AppConfig, PlatformKind,
 };
 use crate::engine::RuntimeSnapshot;
 use crate::platform::{
     synthetic_input_access_granted, synthetic_input_access_request_supported, PlatformDriver,
+    SystemSleepGuard,
 };
 use crate::tray::TrayHandles;
 
@@ -146,9 +147,14 @@ impl AppContext {
     }
 
     pub fn refresh_tray(&self) {
-        let tray_guard = self.tray_handles.lock().unwrap();
-        if let Some(tray) = tray_guard.as_ref() {
-            let _ = tray.refresh(&self.config_snapshot(), &self.runtime_snapshot());
+        let tray_handles = self.tray_handles.lock().unwrap().clone();
+        if let Some(tray) = tray_handles.as_ref() {
+            // Snapshot app state before touching Tauri tray APIs. This keeps
+            // the tray mutex out of any UI work and avoids lock-order stalls
+            // when refreshes race with menu events or settings-window commands.
+            let config = self.config_snapshot();
+            let runtime = self.runtime_snapshot();
+            let _ = tray.refresh(&config, &runtime);
         }
     }
 
@@ -271,6 +277,10 @@ impl AppContext {
         self.driver.seconds_since_last_input()
     }
 
+    pub fn prevent_idle_sleep(&self, reason: &str) -> Result<Box<dyn SystemSleepGuard>, String> {
+        self.driver.prevent_idle_sleep(reason)
+    }
+
     pub fn perform_fake_input_now(&self, reason: &str) -> Result<(), String> {
         let input = self
             .config_snapshot()
@@ -282,6 +292,7 @@ impl AppContext {
         // Losing the persisted timestamp would be annoying, but it should never
         // make a successful synthetic input look like a failed engine action.
         let _ = save_last_fake_input_epoch_ms(&self.app_handle, Some(last_fake_input_epoch_ms));
+        let _ = save_last_driver_error(&self.app_handle, None);
 
         // We keep the last successful synthetic event visible in the runtime snapshot so the
         // user can confirm that manual tests and scheduled pulses are actually firing.
@@ -296,6 +307,10 @@ impl AppContext {
         self.refresh_tray();
 
         Ok(())
+    }
+
+    pub fn persist_last_driver_error(&self, error: &str) {
+        let _ = save_last_driver_error(&self.app_handle, Some(error));
     }
 
     pub fn request_synthetic_input_access(&self) -> Result<(), String> {

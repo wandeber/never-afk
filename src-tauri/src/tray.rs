@@ -1,5 +1,5 @@
 use chrono::{Local, TimeZone};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItem, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
@@ -17,16 +17,32 @@ const PAUSE_30_ITEM_ID: &str = "pause-30";
 const PAUSE_60_ITEM_ID: &str = "pause-60";
 const RUN_ONCE_ITEM_ID: &str = "run-once";
 const QUIT_ITEM_ID: &str = "quit";
+const MAX_ERROR_MENU_CHARS: usize = 140;
 
 pub struct TrayHandles<R: Runtime> {
     icon: TrayIcon<R>,
     active_icon: Image<'static>,
     inactive_icon: Image<'static>,
-    last_icon_active: Mutex<Option<bool>>,
+    last_icon_active: Arc<Mutex<Option<bool>>>,
     status: MenuItem<R>,
     next_check: MenuItem<R>,
     last_event: MenuItem<R>,
     enabled: CheckMenuItem<R>,
+}
+
+impl<R: Runtime> Clone for TrayHandles<R> {
+    fn clone(&self) -> Self {
+        Self {
+            icon: self.icon.clone(),
+            active_icon: self.active_icon.clone(),
+            inactive_icon: self.inactive_icon.clone(),
+            last_icon_active: self.last_icon_active.clone(),
+            status: self.status.clone(),
+            next_check: self.next_check.clone(),
+            last_event: self.last_event.clone(),
+            enabled: self.enabled.clone(),
+        }
+    }
 }
 
 impl<R: Runtime> TrayHandles<R> {
@@ -39,14 +55,7 @@ impl<R: Runtime> TrayHandles<R> {
         let last_event_text = format_last_event_menu_text(snapshot.last_fake_input_epoch_ms);
         let icon_active = uses_active_tray_icon(snapshot);
 
-        let status_text = match snapshot.phase {
-            EnginePhase::WaitingQuiet => "Status: Enabled".to_string(),
-            EnginePhase::Observing => "Status: Observing".to_string(),
-            EnginePhase::Paused => "Status: Paused".to_string(),
-            EnginePhase::ScheduledOff => "Status: Outside schedule".to_string(),
-            EnginePhase::Disabled => "Status: Disabled".to_string(),
-            EnginePhase::Error => "Status: Driver error".to_string(),
-        };
+        let status_text = format_status_menu_text(snapshot);
 
         self.status
             .set_text(status_text)
@@ -102,10 +111,47 @@ fn format_last_event_menu_text(last_fake_input_epoch_ms: Option<u64>) -> String 
     }
 }
 
+fn format_status_menu_text(snapshot: &RuntimeSnapshot) -> String {
+    if snapshot.last_error.is_some() {
+        return "Status: Driver error".to_string();
+    }
+
+    match snapshot.phase {
+        EnginePhase::WaitingQuiet => "Status: Enabled".to_string(),
+        EnginePhase::Observing => "Status: Observing".to_string(),
+        EnginePhase::Paused => "Status: Paused".to_string(),
+        EnginePhase::ScheduledOff => "Status: Outside schedule".to_string(),
+        EnginePhase::Disabled => "Status: Disabled".to_string(),
+        EnginePhase::Error => "Status: Driver error".to_string(),
+    }
+}
+
+fn format_last_error_menu_text(error: &str) -> String {
+    let compact_error = error.split_whitespace().collect::<Vec<_>>().join(" ");
+    let visible_error = truncate_for_menu(&compact_error, MAX_ERROR_MENU_CHARS);
+    format!("Last error: {visible_error}")
+}
+
+fn truncate_for_menu(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+
+    let reserved_for_suffix = 3;
+    let visible_chars = max_chars.saturating_sub(reserved_for_suffix);
+    let mut truncated = text.chars().take(visible_chars).collect::<String>();
+    truncated.push_str("...");
+    truncated
+}
+
 fn format_next_check_menu_text(
     config: &crate::config::AppConfig,
     snapshot: &RuntimeSnapshot,
 ) -> String {
+    if let Some(error) = snapshot.last_error.as_deref() {
+        return format_last_error_menu_text(error);
+    }
+
     match snapshot.phase {
         EnginePhase::ScheduledOff => match snapshot
             .next_relevant_epoch_ms
@@ -173,7 +219,11 @@ fn uses_active_tray_icon(snapshot: &RuntimeSnapshot) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_last_event_title, uses_active_tray_icon};
+    use super::{
+        format_last_event_title, format_next_check_menu_text, format_status_menu_text,
+        uses_active_tray_icon,
+    };
+    use crate::config::AppConfig;
     use crate::engine::{EnginePhase, RuntimeSnapshot};
 
     #[test]
@@ -201,6 +251,20 @@ mod tests {
 
         snapshot.phase = EnginePhase::Paused;
         assert!(!uses_active_tray_icon(&snapshot));
+    }
+
+    #[test]
+    fn keeps_last_driver_error_visible_after_engine_retries() {
+        let mut snapshot = RuntimeSnapshot::bootstrap("F15".into(), None);
+        snapshot.phase = EnginePhase::WaitingQuiet;
+        snapshot.last_error =
+            Some("never-afk needs Accessibility permission to send synthetic key events.".into());
+
+        assert_eq!(format_status_menu_text(&snapshot), "Status: Driver error");
+        assert_eq!(
+            format_next_check_menu_text(&AppConfig::default(), &snapshot),
+            "Last error: never-afk needs Accessibility permission to send synthetic key events."
+        );
     }
 }
 
@@ -276,7 +340,7 @@ pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, Strin
         icon,
         active_icon,
         inactive_icon,
-        last_icon_active: Mutex::new(None),
+        last_icon_active: Arc::new(Mutex::new(None)),
         status,
         next_check,
         last_event,

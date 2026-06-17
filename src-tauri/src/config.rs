@@ -6,6 +6,7 @@ use tauri_plugin_store::StoreExt;
 pub const CONFIG_STORE_PATH: &str = "settings.json";
 const CONFIG_STORE_KEY: &str = "app-config";
 const LAST_FAKE_INPUT_EPOCH_MS_STORE_KEY: &str = "last-fake-input-epoch-ms";
+const LAST_DRIVER_ERROR_STORE_KEY: &str = "last-driver-error";
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -532,6 +533,32 @@ pub fn save_last_fake_input_epoch_ms(
     store
         .save()
         .map_err(|error| format!("Failed to save runtime metadata: {error}"))?;
+    Ok(())
+}
+
+pub fn save_last_driver_error(
+    app_handle: &AppHandle<Wry>,
+    error: Option<&str>,
+) -> Result<(), String> {
+    let store = app_handle
+        .store(CONFIG_STORE_PATH)
+        .map_err(|store_error| format!("Failed to open settings store: {store_error}"))?;
+
+    match error {
+        Some(error) => {
+            let value = serde_json::to_value(error).map_err(|serialize_error| {
+                format!("Failed to serialize last driver error: {serialize_error}")
+            })?;
+            store.set(LAST_DRIVER_ERROR_STORE_KEY.to_string(), value);
+        }
+        None => {
+            store.delete(LAST_DRIVER_ERROR_STORE_KEY);
+        }
+    }
+
+    store
+        .save()
+        .map_err(|save_error| format!("Failed to save runtime metadata: {save_error}"))?;
     Ok(())
 }
 
