@@ -89,7 +89,7 @@ jobs:
 
             macOS:
             - Download the DMG and move `never-afk.app` to `Applications`.
-            - Because these builds are not shipped with a Developer ID distribution signature or notarization, Gatekeeper may require **Open Anyway** the first time you launch them.
+            - The app is ad-hoc signed for Apple Silicon bundle integrity, but it is not shipped with a Developer ID distribution signature or notarization. Gatekeeper may still require **Open Anyway** the first time you launch it.
 
             Windows:
             - Download the `.exe` installer.

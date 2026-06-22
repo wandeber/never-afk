@@ -107,8 +107,9 @@ Release assets currently target:
 - macOS Apple Silicon: `DMG`
 - Windows x64: `EXE`
 
-These builds are intended for personal convenience rather than full commercial distribution. They
-are not signed with a `Developer ID Application` certificate and are not notarized, so:
+These builds are intended for personal convenience rather than full commercial distribution. macOS
+builds are ad-hoc signed so the downloaded app bundle passes Apple Silicon integrity checks, but
+they are not signed with a `Developer ID Application` certificate and are not notarized, so:
 
 - macOS may require **Open Anyway** the first time the app is launched
 - Windows SmartScreen may show an unsigned publisher warning
