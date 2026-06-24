@@ -84,10 +84,10 @@ jobs:
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
-      - name: Verify updater signing configuration
+      - name: Prepare updater signing configuration
         shell: bash
         run: |
-          test -n "${NEVER_AFK_UPDATER_PUBLIC_KEY}" || {
+          test -n "${RAW_NEVER_AFK_UPDATER_PUBLIC_KEY}" || {
             echo "Missing repository variable NEVER_AFK_UPDATER_PUBLIC_KEY."
             exit 1
           }
@@ -95,8 +95,29 @@ jobs:
             echo "Missing repository secret TAURI_SIGNING_PRIVATE_KEY."
             exit 1
           }
+
+          # `tauri signer generate --ci` writes the public key as base64-wrapped
+          # minisign text, while Tauri's updater config expects the decoded
+          # minisign public key block. Accept both forms here so CI keeps
+          # working regardless of whether the GitHub variable was pasted from a
+          # normal `.pub` file or from the CI-friendly generated value.
+          if printf '%s' "${RAW_NEVER_AFK_UPDATER_PUBLIC_KEY}" | grep -q '^untrusted comment:'; then
+            normalized_public_key="${RAW_NEVER_AFK_UPDATER_PUBLIC_KEY}"
+          elif decoded_public_key="$(printf '%s' "${RAW_NEVER_AFK_UPDATER_PUBLIC_KEY}" | base64 --decode 2>/dev/null)" \
+            && printf '%s' "${decoded_public_key}" | grep -q '^untrusted comment:'; then
+            normalized_public_key="${decoded_public_key}"
+          else
+            echo "Repository variable NEVER_AFK_UPDATER_PUBLIC_KEY is not a minisign public key."
+            exit 1
+          fi
+
+          {
+            echo "NEVER_AFK_UPDATER_PUBLIC_KEY<<__NEVER_AFK_UPDATER_PUBLIC_KEY__"
+            printf '%s\n' "${normalized_public_key}"
+            echo "__NEVER_AFK_UPDATER_PUBLIC_KEY__"
+          } >> "${GITHUB_ENV}"
         env:
-          NEVER_AFK_UPDATER_PUBLIC_KEY: ${{ vars.NEVER_AFK_UPDATER_PUBLIC_KEY }}
+          RAW_NEVER_AFK_UPDATER_PUBLIC_KEY: ${{ vars.NEVER_AFK_UPDATER_PUBLIC_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
       - name: Build bundles and publish the GitHub Release
@@ -104,7 +125,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEVER_AFK_UPDATE_CHANNEL: ${{ needs.verify-release.outputs.channel }}
-          NEVER_AFK_UPDATER_PUBLIC_KEY: ${{ vars.NEVER_AFK_UPDATER_PUBLIC_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
