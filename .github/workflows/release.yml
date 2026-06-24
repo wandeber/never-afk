@@ -53,7 +53,7 @@ jobs:
         include:
           - label: macOS Apple Silicon
             runner: macos-15
-            bundleArgs: --bundles dmg
+            bundleArgs: --bundles app,dmg
           - label: Windows x64
             runner: windows-latest
             bundleArgs: --bundles nsis
@@ -97,17 +97,29 @@ jobs:
           }
 
           # `tauri signer generate --ci` writes the public key as base64-wrapped
-          # minisign text, while Tauri's updater config expects the decoded
-          # minisign public key block. Accept both forms here so CI keeps
-          # working regardless of whether the GitHub variable was pasted from a
-          # normal `.pub` file or from the CI-friendly generated value.
-          if printf '%s' "${RAW_NEVER_AFK_UPDATER_PUBLIC_KEY}" | grep -q '^untrusted comment:'; then
-            normalized_public_key="${RAW_NEVER_AFK_UPDATER_PUBLIC_KEY}"
-          elif decoded_public_key="$(printf '%s' "${RAW_NEVER_AFK_UPDATER_PUBLIC_KEY}" | base64 --decode 2>/dev/null)" \
+          # minisign text, which is also the format Tauri's bundler expects when
+          # validating updater signatures. Accept either that CI-friendly value
+          # or a raw minisign `.pub` block, then export the wrapped form for both
+          # the bundler and the runtime updater plugin.
+          raw_public_key="$(printf '%s' "${RAW_NEVER_AFK_UPDATER_PUBLIC_KEY}" | tr -d '\r')"
+          if decoded_public_key="$(printf '%s' "${raw_public_key}" | base64 --decode 2>/dev/null)" \
             && printf '%s' "${decoded_public_key}" | grep -q '^untrusted comment:'; then
-            normalized_public_key="${decoded_public_key}"
+            normalized_public_key="${raw_public_key}"
+          elif printf '%s' "${raw_public_key}" | grep -q '^untrusted comment:'; then
+            normalized_public_key="$(printf '%s\n' "${raw_public_key}" | base64 | tr -d '\n')"
           else
             echo "Repository variable NEVER_AFK_UPDATER_PUBLIC_KEY is not a minisign public key."
+            exit 1
+          fi
+
+          if ! printf '%s' "${normalized_public_key}" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
+            echo "Normalized updater public key is not a base64-wrapped minisign value."
+            exit 1
+          fi
+
+          configured_public_key="$(node -e "process.stdout.write(require('./src-tauri/tauri.conf.json').plugins.updater.pubkey)")"
+          if [ "${normalized_public_key}" != "${configured_public_key}" ]; then
+            echo "Repository variable NEVER_AFK_UPDATER_PUBLIC_KEY does not match src-tauri/tauri.conf.json."
             exit 1
           fi
 
