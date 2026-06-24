@@ -130,7 +130,8 @@ key content in the GitHub secret.
 
 Installed builds check their GitHub release channel automatically at most once per week while the
 engine is enabled. Automatic checks only look for a newer signed manifest; downloads and installs
-still require an explicit user action.
+still require an explicit user action. Manual checks remain available from the app UI and the status
+bar menu.
 
 Release assets currently target:
 
