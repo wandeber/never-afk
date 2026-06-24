@@ -74,6 +74,30 @@ export type RuntimeSnapshot = {
   lastError: string | null;
 };
 
+export type UpdateChannel = "stable" | "beta" | "canary";
+
+export type UpdatePhase =
+  | "idle"
+  | "checking"
+  | "available"
+  | "notAvailable"
+  | "downloading"
+  | "installing"
+  | "error";
+
+export type UpdateSnapshot = {
+  channel: UpdateChannel;
+  configured: boolean;
+  phase: UpdatePhase;
+  currentVersion: string;
+  availableVersion: string | null;
+  notes: string | null;
+  downloadedBytes: number | null;
+  contentLengthBytes: number | null;
+  lastCheckedEpochMs: number | null;
+  lastError: string | null;
+};
+
 export type SafeKeyOption = {
   id: SafeKeyPreset;
   label: string;
@@ -90,6 +114,7 @@ export type SyntheticInputAccessState = {
 export type FrontendState = {
   config: AppConfig;
   runtime: RuntimeSnapshot;
+  update: UpdateSnapshot;
   safeKeyOptions: SafeKeyOption[];
   customInputLabel: string;
   syntheticInputAccess: SyntheticInputAccessState;

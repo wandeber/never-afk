@@ -5,6 +5,7 @@ import type {
   SafeKeyOption,
   SaveState,
   SyntheticInputAccessState,
+  UpdateSnapshot,
 } from "../types";
 import { SchedulePreferences } from "./SchedulePreferences";
 
@@ -13,6 +14,7 @@ type SettingsFormProps = {
   customInputLabel: string;
   safeKeyOptions: SafeKeyOption[];
   syntheticInputAccess: SyntheticInputAccessState;
+  update: UpdateSnapshot;
   busy: boolean;
   dirty: boolean;
   saveError: string | null;
@@ -21,6 +23,8 @@ type SettingsFormProps = {
   permissionNote: string | null;
   onRequestSyntheticInputAccess: () => void;
   onRevealSyntheticInputAccessTarget: () => void;
+  onCheckForUpdates: () => void;
+  onInstallUpdate: () => void;
   onChange: (nextConfig: AppConfig) => void;
 };
 
@@ -79,11 +83,58 @@ function saveStateLabel(
   return "Changes apply automatically.";
 }
 
+function formatUpdateProgress(update: UpdateSnapshot) {
+  if (
+    update.downloadedBytes === null ||
+    update.contentLengthBytes === null ||
+    update.contentLengthBytes <= 0
+  ) {
+    return "Downloading update.";
+  }
+
+  const percent = Math.min(
+    100,
+    Math.floor((update.downloadedBytes / update.contentLengthBytes) * 100),
+  );
+  return `Downloading update ${percent}%.`;
+}
+
+function updateStatusLabel(update: UpdateSnapshot) {
+  if (!update.configured) {
+    return "Updater signing is not configured for this build.";
+  }
+
+  if (update.lastError) {
+    return update.lastError;
+  }
+
+  switch (update.phase) {
+    case "checking":
+      return "Checking GitHub Releases.";
+    case "available":
+      return update.availableVersion
+        ? `Version ${update.availableVersion} is available.`
+        : "An update is available.";
+    case "notAvailable":
+      return "This version is up to date.";
+    case "downloading":
+      return formatUpdateProgress(update);
+    case "installing":
+      return "Installing update and relaunching.";
+    case "error":
+      return "The last update action failed.";
+    case "idle":
+    default:
+      return `Current version ${update.currentVersion}.`;
+  }
+}
+
 export const SettingsForm = memo(function SettingsForm({
   config,
   customInputLabel,
   safeKeyOptions,
   syntheticInputAccess,
+  update,
   busy,
   dirty,
   saveError,
@@ -92,8 +143,15 @@ export const SettingsForm = memo(function SettingsForm({
   permissionNote,
   onRequestSyntheticInputAccess,
   onRevealSyntheticInputAccessTarget,
+  onCheckForUpdates,
+  onInstallUpdate,
   onChange,
 }: SettingsFormProps) {
+  const updateBusy = ["checking", "downloading", "installing"].includes(
+    update.phase,
+  );
+  const updateAvailable = update.phase === "available";
+
   return (
     <section className="preferences-pane">
       <section className="preferences-group">
@@ -371,6 +429,55 @@ export const SettingsForm = memo(function SettingsForm({
           </div>
         </section>
       ) : null}
+
+      <section className="preferences-group">
+        <div className="preferences-group-header">
+          <h2>Updates</h2>
+          <p>Install published GitHub release updates for this build channel.</p>
+        </div>
+
+        <div className="preferences-list">
+          <PreferenceRow
+            title="Release channel"
+            description="The channel is selected at build time so store builds can use their own update path later."
+          >
+            <code className="path-chip">{update.channel}</code>
+          </PreferenceRow>
+
+          <PreferenceRow
+            title="GitHub updater"
+            description="Check the configured release manifest and install a signed update when one is available."
+          >
+            <div className="button-cluster">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={!update.configured || updateBusy}
+                onClick={onCheckForUpdates}
+              >
+                {update.phase === "checking" ? "Checking..." : "Check Now"}
+              </button>
+
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={!update.configured || updateBusy || !updateAvailable}
+                onClick={onInstallUpdate}
+              >
+                {update.phase === "downloading"
+                  ? "Downloading..."
+                  : update.phase === "installing"
+                    ? "Installing..."
+                    : "Download and Install"}
+              </button>
+            </div>
+          </PreferenceRow>
+        </div>
+
+        <div className="preferences-group-footer">
+          <p className="permission-note">{updateStatusLabel(update)}</p>
+        </div>
+      </section>
 
       {saveError ? (
         <p className="status-banner" role="alert">

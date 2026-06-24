@@ -36,9 +36,13 @@ export function formatRuntimeNote(runtime: RuntimeSnapshot) {
     return "Enable the engine to resume automatic activity.";
   }
 
-  if (runtime.nextCheckInSeconds === null) {
+  if (runtime.nextRelevantEpochMs === null) {
     return "Waiting for the next activity cycle";
   }
 
-  return `Next check in ${runtime.nextCheckInSeconds}s`;
+  return `Next activity check ${formatAbsoluteTime(runtime.nextRelevantEpochMs, {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
 }

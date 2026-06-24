@@ -4,6 +4,7 @@ mod platform;
 mod schedule;
 mod state;
 mod tray;
+mod updates;
 
 use config::AppConfig;
 use engine::RuntimeSnapshot;
@@ -54,9 +55,28 @@ fn reveal_synthetic_input_access_target_command(
     Ok(state.frontend_state())
 }
 
+#[tauri::command]
+async fn check_for_update_command(
+    app_handle: tauri::AppHandle,
+    state: State<'_, SharedAppContext>,
+) -> Result<FrontendState, String> {
+    updates::check_for_update(app_handle, state.inner().clone()).await?;
+    Ok(state.frontend_state())
+}
+
+#[tauri::command]
+async fn install_update_command(
+    app_handle: tauri::AppHandle,
+    state: State<'_, SharedAppContext>,
+) -> Result<FrontendState, String> {
+    updates::download_install_and_restart(app_handle, state.inner().clone()).await?;
+    Ok(state.frontend_state())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .plugin(updates::updater_plugin_builder().build())
         .plugin(tauri_plugin_store::Builder::default().build())
         .on_menu_event(|app_handle, event| {
             if let Some(context) = app_handle.try_state::<SharedAppContext>() {
@@ -129,7 +149,9 @@ pub fn run() {
             get_runtime_snapshot,
             save_config,
             request_synthetic_input_access_command,
-            reveal_synthetic_input_access_target_command
+            reveal_synthetic_input_access_target_command,
+            check_for_update_command,
+            install_update_command
         ]);
 
     let app = builder

@@ -7,6 +7,7 @@ function App() {
   const {
     serverState,
     runtimeSnapshot,
+    updateSnapshot,
     draftConfig,
     busy,
     dirty,
@@ -16,6 +17,8 @@ function App() {
     permissionNote,
     requestPermission,
     revealPermissionTarget,
+    checkForUpdates,
+    installAvailableUpdate,
     handleConfigChange,
   } = useAppController();
 
@@ -60,6 +63,7 @@ function App() {
             customInputLabel={serverState.customInputLabel}
             safeKeyOptions={serverState.safeKeyOptions}
             syntheticInputAccess={serverState.syntheticInputAccess}
+            update={updateSnapshot ?? serverState.update}
             busy={busy}
             dirty={dirty}
             saveError={saveError}
@@ -68,6 +72,8 @@ function App() {
             permissionNote={permissionNote}
             onRequestSyntheticInputAccess={requestPermission}
             onRevealSyntheticInputAccessTarget={revealPermissionTarget}
+            onCheckForUpdates={checkForUpdates}
+            onInstallUpdate={installAvailableUpdate}
             onChange={handleConfigChange}
           />
         </div>

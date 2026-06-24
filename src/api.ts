@@ -20,3 +20,11 @@ export function requestSyntheticInputAccess() {
 export function revealSyntheticInputAccessTarget() {
   return invoke<FrontendState>("reveal_synthetic_input_access_target_command");
 }
+
+export function checkForUpdate() {
+  return invoke<FrontendState>("check_for_update_command");
+}
+
+export function installUpdate() {
+  return invoke<FrontendState>("install_update_command");
+}

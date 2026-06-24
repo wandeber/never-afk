@@ -7,8 +7,10 @@ import {
 } from "react";
 
 import {
+  checkForUpdate,
   getFrontendState,
   getRuntimeSnapshot,
+  installUpdate,
   revealSyntheticInputAccessTarget,
   requestSyntheticInputAccess,
   saveConfig,
@@ -18,16 +20,34 @@ import type {
   FrontendState,
   RuntimeSnapshot,
   SaveState,
+  UpdateSnapshot,
 } from "../types";
 
 function serializeConfig(config: AppConfig) {
   return JSON.stringify(config);
 }
 
+function actionErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim() !== "") {
+    return error;
+  }
+
+  return fallback;
+}
+
+const RUNTIME_REFRESH_INTERVAL_MS = 30_000;
+
 export function useAppController() {
   const [serverState, setServerState] = useState<FrontendState | null>(null);
   const [runtimeSnapshot, setRuntimeSnapshot] =
     useState<RuntimeSnapshot | null>(null);
+  const [updateSnapshot, setUpdateSnapshot] = useState<UpdateSnapshot | null>(
+    null,
+  );
   const [draftConfig, setDraftConfig] = useState<AppConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -47,6 +67,7 @@ export function useAppController() {
       startTransition(() => {
         setServerState(nextState);
         setRuntimeSnapshot(nextState.runtime);
+        setUpdateSnapshot(nextState.update);
         setDraftConfig((currentDraft) => {
           if (!preserveDraft || !currentDraft) {
             latestDraftRef.current = nextState.config;
@@ -132,6 +153,40 @@ export function useAppController() {
     }
   });
 
+  const checkForUpdates = useEffectEvent(async () => {
+    try {
+      const nextState = await checkForUpdate();
+      applyServerState(nextState, true);
+    } catch (error) {
+      setUpdateSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              phase: "error",
+              lastError: actionErrorMessage(error, "Update check failed."),
+            }
+          : current,
+      );
+    }
+  });
+
+  const installAvailableUpdate = useEffectEvent(async () => {
+    try {
+      const nextState = await installUpdate();
+      applyServerState(nextState, true);
+    } catch (error) {
+      setUpdateSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              phase: "error",
+              lastError: actionErrorMessage(error, "Update install failed."),
+            }
+          : current,
+      );
+    }
+  });
+
   const refreshRuntimeSnapshot = useEffectEvent(async () => {
     try {
       const nextRuntime = await getRuntimeSnapshot();
@@ -160,6 +215,7 @@ export function useAppController() {
           startTransition(() => {
             setServerState(nextState);
             setRuntimeSnapshot(nextState.runtime);
+            setUpdateSnapshot(nextState.update);
             setDraftConfig(nextState.config);
           });
         }
@@ -184,13 +240,16 @@ export function useAppController() {
       return undefined;
     }
 
+    // Runtime status now uses absolute deadlines instead of a visible countdown,
+    // so a low-frequency refresh is enough when the settings window is open.
+    // Direct user actions still receive fresh state from their command results.
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== "visible") {
         return;
       }
 
       void refreshRuntimeSnapshot();
-    }, 1000);
+    }, RUNTIME_REFRESH_INTERVAL_MS);
 
     return () => {
       window.clearInterval(intervalId);
@@ -260,6 +319,7 @@ export function useAppController() {
   return {
     serverState,
     runtimeSnapshot,
+    updateSnapshot,
     draftConfig,
     busy,
     dirty,
@@ -269,6 +329,8 @@ export function useAppController() {
     permissionNote,
     requestPermission,
     revealPermissionTarget,
+    checkForUpdates,
+    installAvailableUpdate,
     handleConfigChange,
   };
 }

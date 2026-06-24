@@ -7,6 +7,7 @@ use tauri::{AppHandle, Runtime, Wry};
 
 use crate::engine::{EnginePhase, RuntimeSnapshot};
 use crate::state::SharedAppContext;
+use crate::updates::{self, UpdatePhase, UpdateSnapshot};
 
 const STATUS_ITEM_ID: &str = "status";
 const NEXT_CHECK_ITEM_ID: &str = "next-check";
@@ -16,6 +17,7 @@ const OPEN_SETTINGS_ITEM_ID: &str = "open-settings";
 const PAUSE_30_ITEM_ID: &str = "pause-30";
 const PAUSE_60_ITEM_ID: &str = "pause-60";
 const RUN_ONCE_ITEM_ID: &str = "run-once";
+const UPDATE_ITEM_ID: &str = "update";
 const QUIT_ITEM_ID: &str = "quit";
 const MAX_ERROR_MENU_CHARS: usize = 140;
 
@@ -27,6 +29,7 @@ pub struct TrayHandles<R: Runtime> {
     status: MenuItem<R>,
     next_check: MenuItem<R>,
     last_event: MenuItem<R>,
+    update: MenuItem<R>,
     enabled: CheckMenuItem<R>,
 }
 
@@ -40,6 +43,7 @@ impl<R: Runtime> Clone for TrayHandles<R> {
             status: self.status.clone(),
             next_check: self.next_check.clone(),
             last_event: self.last_event.clone(),
+            update: self.update.clone(),
             enabled: self.enabled.clone(),
         }
     }
@@ -50,6 +54,7 @@ impl<R: Runtime> TrayHandles<R> {
         &self,
         config: &crate::config::AppConfig,
         snapshot: &RuntimeSnapshot,
+        update: &UpdateSnapshot,
     ) -> Result<(), String> {
         let next_check_text = format_next_check_menu_text(config, snapshot);
         let last_event_text = format_last_event_menu_text(snapshot.last_fake_input_epoch_ms);
@@ -66,6 +71,12 @@ impl<R: Runtime> TrayHandles<R> {
         self.last_event
             .set_text(last_event_text)
             .map_err(|error| format!("Failed to update tray last-event item: {error}"))?;
+        self.update
+            .set_text(format_update_menu_text(update))
+            .map_err(|error| format!("Failed to update tray update item: {error}"))?;
+        self.update
+            .set_enabled(update_menu_enabled(update))
+            .map_err(|error| format!("Failed to update tray update enabled state: {error}"))?;
         self.enabled
             .set_checked(config.enabled)
             .map_err(|error| format!("Failed to update tray enabled state: {error}"))?;
@@ -171,11 +182,52 @@ fn format_next_check_menu_text(
             Some(label) => format!("Resumes: {label}"),
             None => "Resumes: -".to_string(),
         },
-        _ => match snapshot.next_check_in_seconds {
-            Some(seconds) => format!("Next check in {}s", seconds.max(1)),
-            None => "Next check in -".to_string(),
+        _ => match snapshot
+            .next_relevant_epoch_ms
+            .and_then(format_weekday_time)
+        {
+            Some(label) => format!("Next check: {label}"),
+            None => "Next check: -".to_string(),
         },
     }
+}
+
+fn format_update_menu_text(update: &UpdateSnapshot) -> String {
+    match update.phase {
+        UpdatePhase::Checking => "Checking for Updates...".to_string(),
+        UpdatePhase::Available => update
+            .available_version
+            .as_ref()
+            .map(|version| format!("Install Update {version}"))
+            .unwrap_or_else(|| "Install Update".to_string()),
+        UpdatePhase::Downloading => format_download_progress(update),
+        UpdatePhase::Installing => "Installing Update...".to_string(),
+        UpdatePhase::Error => "Retry Update Check".to_string(),
+        UpdatePhase::Idle | UpdatePhase::NotAvailable => {
+            format!("Check for Updates ({})", update.channel.label())
+        }
+    }
+}
+
+fn format_download_progress(update: &UpdateSnapshot) -> String {
+    match (update.downloaded_bytes, update.content_length_bytes) {
+        (Some(downloaded), Some(total)) if total > 0 => {
+            let percent = downloaded
+                .saturating_mul(100)
+                .saturating_div(total)
+                .min(100);
+            format!("Downloading Update... {percent}%")
+        }
+        _ => "Downloading Update...".to_string(),
+    }
+}
+
+fn update_menu_enabled(update: &UpdateSnapshot) -> bool {
+    update.configured
+        && !matches!(
+            update.phase,
+            UpdatePhase::Checking | UpdatePhase::Downloading | UpdatePhase::Installing
+        )
 }
 
 fn format_last_event_title(
@@ -274,7 +326,7 @@ pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, Strin
         .build(app_handle)
         .map_err(|error| format!("Failed to create the tray status item: {error}"))?;
 
-    let next_check = MenuItemBuilder::with_id(NEXT_CHECK_ITEM_ID, "Next check in -")
+    let next_check = MenuItemBuilder::with_id(NEXT_CHECK_ITEM_ID, "Next check: -")
         .enabled(false)
         .build(app_handle)
         .map_err(|error| format!("Failed to create the tray timing item: {error}"))?;
@@ -305,6 +357,10 @@ pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, Strin
         .build(app_handle)
         .map_err(|error| format!("Failed to create the run-once menu item: {error}"))?;
 
+    let update = MenuItemBuilder::with_id(UPDATE_ITEM_ID, "Check for Updates")
+        .build(app_handle)
+        .map_err(|error| format!("Failed to create the update menu item: {error}"))?;
+
     let quit = MenuItemBuilder::with_id(QUIT_ITEM_ID, "Quit")
         .build(app_handle)
         .map_err(|error| format!("Failed to create the quit menu item: {error}"))?;
@@ -319,6 +375,7 @@ pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, Strin
         .item(&pause_30)
         .item(&pause_60)
         .item(&run_once)
+        .item(&update)
         .separator()
         .item(&quit)
         .build()
@@ -344,6 +401,7 @@ pub fn build_tray(app_handle: &AppHandle<Wry>) -> Result<TrayHandles<Wry>, Strin
         status,
         next_check,
         last_event,
+        update,
         enabled,
     })
 }
@@ -371,6 +429,24 @@ pub fn handle_menu_event(context: SharedAppContext, item_id: &str) -> Result<(),
         }
         RUN_ONCE_ITEM_ID => {
             context.request_manual_run();
+        }
+        UPDATE_ITEM_ID => {
+            let update_context = context.clone();
+            tauri::async_runtime::spawn(async move {
+                let app_handle = update_context.app_handle().clone();
+                let result = if matches!(
+                    update_context.update_snapshot().phase,
+                    UpdatePhase::Available
+                ) {
+                    updates::download_install_and_restart(app_handle, update_context.clone()).await
+                } else {
+                    updates::check_for_update(app_handle, update_context.clone()).await
+                };
+
+                if let Err(error) = result {
+                    updates::record_update_error(&update_context, error);
+                }
+            });
         }
         QUIT_ITEM_ID => {
             context.mark_quitting();

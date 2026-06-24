@@ -17,24 +17,30 @@ import type {
 } from "./types";
 
 const apiMocks = vi.hoisted(() => ({
+  checkForUpdate: vi.fn<() => Promise<FrontendState>>(),
   getFrontendState: vi.fn<() => Promise<FrontendState>>(),
   getRuntimeSnapshot: vi.fn<() => Promise<RuntimeSnapshot>>(),
+  installUpdate: vi.fn<() => Promise<FrontendState>>(),
   revealSyntheticInputAccessTarget: vi.fn<() => Promise<FrontendState>>(),
   requestSyntheticInputAccess: vi.fn<() => Promise<FrontendState>>(),
   saveConfig: vi.fn<(config: AppConfig) => Promise<FrontendState>>(),
 }));
 
 vi.mock("./api", () => ({
+  checkForUpdate: apiMocks.checkForUpdate,
   getFrontendState: apiMocks.getFrontendState,
   getRuntimeSnapshot: apiMocks.getRuntimeSnapshot,
+  installUpdate: apiMocks.installUpdate,
   revealSyntheticInputAccessTarget: apiMocks.revealSyntheticInputAccessTarget,
   requestSyntheticInputAccess: apiMocks.requestSyntheticInputAccess,
   saveConfig: apiMocks.saveConfig,
 }));
 
 const {
+  checkForUpdate,
   getFrontendState,
   getRuntimeSnapshot,
+  installUpdate,
   revealSyntheticInputAccessTarget,
   requestSyntheticInputAccess,
   saveConfig,
@@ -65,6 +71,21 @@ function makeScheduleRange(
     startMinutes: 9 * 60,
     endMinutes: 17 * 60,
     ...overrides,
+  };
+}
+
+function makeUpdateSnapshot() {
+  return {
+    channel: "stable" as const,
+    configured: true,
+    phase: "idle" as const,
+    currentVersion: "0.1.2",
+    availableVersion: null,
+    notes: null,
+    downloadedBytes: null,
+    contentLengthBytes: null,
+    lastCheckedEpochMs: null,
+    lastError: null,
   };
 }
 
@@ -103,6 +124,7 @@ function makeFrontendState(
       resolvedInputLabel: config.selectedKey,
       ...runtimeOverrides,
     }),
+    update: makeUpdateSnapshot(),
     safeKeyOptions: [
       { id: "Fn", label: "Fn", supported: true },
       { id: "A", label: "A", supported: true },
@@ -139,6 +161,8 @@ describe("App", () => {
 
     getFrontendState.mockResolvedValue(makeFrontendState());
     getRuntimeSnapshot.mockResolvedValue(makeRuntimeSnapshot());
+    checkForUpdate.mockResolvedValue(makeFrontendState());
+    installUpdate.mockResolvedValue(makeFrontendState());
     revealSyntheticInputAccessTarget.mockResolvedValue(makeFrontendState());
     requestSyntheticInputAccess.mockResolvedValue(
       makeFrontendState({}, {}, { granted: true }),
@@ -178,6 +202,7 @@ describe("App", () => {
   }, 10000);
 
   it("polls runtime updates without resetting the current key selection", async () => {
+    vi.useFakeTimers();
     getFrontendState.mockReset();
     getRuntimeSnapshot.mockReset();
     getFrontendState
@@ -190,23 +215,35 @@ describe("App", () => {
       }),
     );
 
-    render(<App />);
+    try {
+      render(<App />);
 
-    const presetKeySelect = await screen.findByRole("combobox");
-    fireEvent.change(presetKeySelect, { target: { value: "A" } });
+      await act(async () => {
+        await Promise.resolve();
+      });
 
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 350));
-    });
+      const presetKeySelect = screen.getByRole("combobox");
+      fireEvent.change(presetKeySelect, { target: { value: "A" } });
 
-    await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 1200));
-    });
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+        await Promise.resolve();
+      });
 
-    await waitFor(() => expect(getRuntimeSnapshot).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Next check in 45s")).toBeTruthy();
-    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("A");
-    expect(screen.getByText(/Current key/i).textContent).toContain("A");
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+        await Promise.resolve();
+      });
+
+      expect(getRuntimeSnapshot).toHaveBeenCalledTimes(1);
+      expect(screen.getByText(/Next activity check/i)).toBeTruthy();
+      expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe(
+        "A",
+      );
+      expect(screen.getByText(/Current key/i).textContent).toContain("A");
+    } finally {
+      vi.useRealTimers();
+    }
   }, 10000);
 
   it("refreshes accessibility access after the window regains focus", async () => {

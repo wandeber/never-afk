@@ -9,8 +9,9 @@ use tauri::{AppHandle, Manager, Wry};
 use std::process::Command;
 
 use crate::config::{
-    load_last_fake_input_epoch_ms, load_persisted_config, safe_key_options, save_last_driver_error,
-    save_last_fake_input_epoch_ms, save_persisted_config, AppConfig, PlatformKind,
+    load_last_fake_input_epoch_ms, load_last_update_check_epoch_ms, load_persisted_config,
+    safe_key_options, save_last_driver_error, save_last_fake_input_epoch_ms, save_persisted_config,
+    AppConfig, PlatformKind,
 };
 use crate::engine::RuntimeSnapshot;
 use crate::platform::{
@@ -18,6 +19,7 @@ use crate::platform::{
     SystemSleepGuard,
 };
 use crate::tray::TrayHandles;
+use crate::updates::UpdateSnapshot;
 
 pub type SharedAppContext = Arc<AppContext>;
 
@@ -26,6 +28,7 @@ pub type SharedAppContext = Arc<AppContext>;
 pub struct FrontendState {
     pub config: AppConfig,
     pub runtime: RuntimeSnapshot,
+    pub update: UpdateSnapshot,
     pub safe_key_options: Vec<crate::config::SafeKeyOption>,
     pub custom_input_label: String,
     pub synthetic_input_access: SyntheticInputAccessState,
@@ -46,6 +49,8 @@ pub struct AppContext {
     config: RwLock<AppConfig>,
     config_generation: AtomicU64,
     runtime_snapshot: Mutex<RuntimeSnapshot>,
+    update_snapshot: Mutex<UpdateSnapshot>,
+    update_action_running: AtomicBool,
     pause_until_epoch_ms: Mutex<Option<u64>>,
     wake_signal: Arc<(Mutex<u64>, Condvar)>,
     manual_run_requested: AtomicBool,
@@ -80,6 +85,7 @@ impl AppContext {
             let _ = save_last_fake_input_epoch_ms(&app_handle, None);
             None
         };
+        let last_update_check_epoch_ms = load_last_update_check_epoch_ms(&app_handle)?;
 
         Ok(Arc::new(Self {
             app_handle,
@@ -90,6 +96,8 @@ impl AppContext {
                 resolved_input_label,
                 last_fake_input_epoch_ms,
             )),
+            update_snapshot: Mutex::new(UpdateSnapshot::bootstrap(last_update_check_epoch_ms)),
+            update_action_running: AtomicBool::new(false),
             pause_until_epoch_ms: Mutex::new(None),
             wake_signal: Arc::new((Mutex::new(0), Condvar::new())),
             manual_run_requested: AtomicBool::new(false),
@@ -118,6 +126,7 @@ impl AppContext {
         FrontendState {
             config: self.config_snapshot(),
             runtime: self.runtime_snapshot(),
+            update: self.update_snapshot(),
             safe_key_options: safe_key_options(self.platform_kind()),
             custom_input_label: self.platform_kind().custom_input_label().to_string(),
             synthetic_input_access: SyntheticInputAccessState {
@@ -142,6 +151,23 @@ impl AppContext {
         update(&mut snapshot);
     }
 
+    pub fn update_snapshot(&self) -> UpdateSnapshot {
+        self.update_snapshot.lock().unwrap().clone()
+    }
+
+    pub fn update_update_snapshot(&self, update: impl FnOnce(&mut UpdateSnapshot)) {
+        let mut snapshot = self.update_snapshot.lock().unwrap();
+        update(&mut snapshot);
+    }
+
+    pub fn try_begin_update_action(&self) -> bool {
+        !self.update_action_running.swap(true, Ordering::AcqRel)
+    }
+
+    pub fn finish_update_action(&self) {
+        self.update_action_running.store(false, Ordering::Release);
+    }
+
     pub fn set_tray_handles(&self, tray_handles: TrayHandles<Wry>) {
         *self.tray_handles.lock().unwrap() = Some(tray_handles);
     }
@@ -154,7 +180,8 @@ impl AppContext {
             // when refreshes race with menu events or settings-window commands.
             let config = self.config_snapshot();
             let runtime = self.runtime_snapshot();
-            let _ = tray.refresh(&config, &runtime);
+            let update = self.update_snapshot();
+            let _ = tray.refresh(&config, &runtime, &update);
         }
     }
 

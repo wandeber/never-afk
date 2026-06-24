@@ -7,6 +7,7 @@ pub const CONFIG_STORE_PATH: &str = "settings.json";
 const CONFIG_STORE_KEY: &str = "app-config";
 const LAST_FAKE_INPUT_EPOCH_MS_STORE_KEY: &str = "last-fake-input-epoch-ms";
 const LAST_DRIVER_ERROR_STORE_KEY: &str = "last-driver-error";
+const LAST_UPDATE_CHECK_EPOCH_MS_STORE_KEY: &str = "last-update-check-epoch-ms";
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -492,6 +493,20 @@ pub fn load_last_fake_input_epoch_ms(app_handle: &AppHandle<Wry>) -> Result<Opti
     }
 }
 
+pub fn load_last_update_check_epoch_ms(app_handle: &AppHandle<Wry>) -> Result<Option<u64>, String> {
+    let store = app_handle
+        .store(CONFIG_STORE_PATH)
+        .map_err(|error| format!("Failed to open settings store: {error}"))?;
+
+    let persisted = store.get(LAST_UPDATE_CHECK_EPOCH_MS_STORE_KEY);
+    match persisted {
+        Some(value) => serde_json::from_value(value.clone())
+            .map(Some)
+            .map_err(|error| format!("Failed to decode last update-check timestamp: {error}")),
+        None => Ok(None),
+    }
+}
+
 pub fn save_persisted_config(
     app_handle: &AppHandle<Wry>,
     config: &AppConfig,
@@ -529,6 +544,24 @@ pub fn save_last_fake_input_epoch_ms(
             store.delete(LAST_FAKE_INPUT_EPOCH_MS_STORE_KEY);
         }
     }
+
+    store
+        .save()
+        .map_err(|error| format!("Failed to save runtime metadata: {error}"))?;
+    Ok(())
+}
+
+pub fn save_last_update_check_epoch_ms(
+    app_handle: &AppHandle<Wry>,
+    epoch_ms: u64,
+) -> Result<(), String> {
+    let store = app_handle
+        .store(CONFIG_STORE_PATH)
+        .map_err(|error| format!("Failed to open settings store: {error}"))?;
+
+    let value = serde_json::to_value(epoch_ms)
+        .map_err(|error| format!("Failed to serialize last update-check timestamp: {error}"))?;
+    store.set(LAST_UPDATE_CHECK_EPOCH_MS_STORE_KEY.to_string(), value);
 
     store
         .save()

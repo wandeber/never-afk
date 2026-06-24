@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+const SEMVER_PATTERN =
+  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
 function extractCargoPackageVersion(cargoManifest) {
   const packageBlockMatch = /\[package\][\s\S]*?^version\s*=\s*"([^"]+)"/m.exec(
     cargoManifest,
@@ -16,15 +19,50 @@ function extractCargoPackageVersion(cargoManifest) {
 }
 
 function extractVersionFromTag(tagName) {
-  const tagMatch = /^version-(\d+\.\d+\.\d+)$/.exec(tagName);
+  const tagMatch = /^(version|beta|canary)-(.+)$/.exec(tagName);
 
   if (!tagMatch) {
     throw new Error(
-      `Release tags must use the version-x.x.x format. Received: ${tagName}`,
+      `Release tags must use version-x.x.x, beta-x.x.x-beta.n, or canary-x.x.x-canary.n. Received: ${tagName}`,
     );
   }
 
-  return tagMatch[1];
+  const [, prefix, version] = tagMatch;
+  if (!SEMVER_PATTERN.test(version)) {
+    throw new Error(`Release tag version is not valid SemVer: ${version}`);
+  }
+
+  const channel = prefix === "version" ? "stable" : prefix;
+  if (channel === "stable" && version.includes("-")) {
+    throw new Error("Stable version-* tags must not use SemVer prerelease suffixes.");
+  }
+
+  if (channel === "beta" && !/-beta(?:[.-]|$)/.test(version)) {
+    throw new Error("Beta tags must include a SemVer beta prerelease suffix.");
+  }
+
+  if (channel === "canary" && !/-canary(?:[.-]|$)/.test(version)) {
+    throw new Error("Canary tags must include a SemVer canary prerelease suffix.");
+  }
+
+  return {
+    channel,
+    prerelease: channel !== "stable",
+    version,
+  };
+}
+
+async function writeGithubOutputs(outputs) {
+  const outputPath = process.env.GITHUB_OUTPUT;
+  if (!outputPath) {
+    return;
+  }
+
+  const { appendFile } = await import("node:fs/promises");
+  const content = Object.entries(outputs)
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+  await appendFile(outputPath, `${content}\n`);
 }
 
 async function main() {
@@ -44,10 +82,10 @@ async function main() {
   const packageVersion = JSON.parse(packageJsonText).version;
   const tauriVersion = JSON.parse(tauriConfigText).version;
   const cargoVersion = extractCargoPackageVersion(cargoManifestText);
-  const tagVersion = extractVersionFromTag(tagName);
+  const release = extractVersionFromTag(tagName);
 
   const discoveredVersions = {
-    tag: tagVersion,
+    tag: release.version,
     packageJson: packageVersion,
     tauriConfig: tauriVersion,
     cargoToml: cargoVersion,
@@ -58,7 +96,7 @@ async function main() {
     throw new Error(
       [
         "Release version mismatch detected.",
-        `Tag version: ${tagVersion}`,
+        `Tag version: ${release.version}`,
         `package.json: ${packageVersion}`,
         `src-tauri/tauri.conf.json: ${tauriVersion}`,
         `src-tauri/Cargo.toml: ${cargoVersion}`,
@@ -67,7 +105,15 @@ async function main() {
     );
   }
 
-  console.log(`Release version ${tagVersion} matches all manifest files.`);
+  await writeGithubOutputs({
+    channel: release.channel,
+    prerelease: release.prerelease,
+    version: release.version,
+  });
+
+  console.log(
+    `Release version ${release.version} matches all manifest files for the ${release.channel} channel.`,
+  );
 }
 
 main().catch((error) => {
