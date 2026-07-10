@@ -158,19 +158,24 @@ export function SchedulePreferences({
       <div className="preferences-list">
         <div className="preference-row">
           <div className="preference-copy">
-            <h3>Use schedule</h3>
-            <p>
+            <label className="preference-title" htmlFor="schedule-enabled">
+              Use schedule
+            </label>
+            <p id="schedule-enabled-description">
               Keep automatic cycles active only inside the ranges configured
               below.
             </p>
           </div>
 
           <div className="preference-control">
-            <label className="checkbox-inline">
+            <label className="switch-control" htmlFor="schedule-enabled">
               <input
-                className="preference-checkbox"
+                id="schedule-enabled"
+                className="switch-input"
                 type="checkbox"
+                role="switch"
                 checked={config.scheduleEnabled}
+                aria-describedby="schedule-enabled-description"
                 onChange={(event) =>
                   onChange({
                     ...config,
@@ -178,7 +183,12 @@ export function SchedulePreferences({
                   })
                 }
               />
-              <span>On</span>
+              <span className="switch-track" aria-hidden="true">
+                <span className="switch-thumb" />
+              </span>
+              <span className="switch-state" aria-hidden="true">
+                {config.scheduleEnabled ? "On" : "Off"}
+              </span>
             </label>
           </div>
         </div>
@@ -198,16 +208,23 @@ export function SchedulePreferences({
         ) : (
           <div className="schedule-range-list">
             {config.scheduleRanges.map((range, index) => (
-              <section className="schedule-range-card" key={index}>
+              <section
+                className="schedule-range-card"
+                key={index}
+                aria-labelledby={`schedule-range-${index + 1}-title`}
+              >
                 <div className="schedule-range-header">
                   <div>
-                    <h3>Range {index + 1}</h3>
+                    <h3 id={`schedule-range-${index + 1}-title`}>
+                      Range {index + 1}
+                    </h3>
                     <p>Pick weekdays plus a start and end time.</p>
                   </div>
 
                   <button
                     className="secondary-button"
                     type="button"
+                    aria-label={`Remove range ${index + 1}`}
                     onClick={() => removeRange(index)}
                   >
                     Remove
@@ -218,7 +235,11 @@ export function SchedulePreferences({
                   <div className="schedule-field">
                     <span className="schedule-field-label">Days</span>
 
-                    <div className="weekday-toggle-grid">
+                    <div
+                      className="weekday-toggle-grid"
+                      role="group"
+                      aria-label={`Days for range ${index + 1}`}
+                    >
                       {WEEKDAY_OPTIONS.map((weekday) => {
                         const selected = range.daysOfWeek.includes(weekday);
 
@@ -260,6 +281,7 @@ export function SchedulePreferences({
                           type="time"
                           step={60}
                           value={formatMinutesAsTime(range.startMinutes)}
+                          aria-label={`Start time for range ${index + 1}`}
                           onChange={(event) => {
                             const parsed = parseTimeToMinutes(
                               event.currentTarget.value,
@@ -282,6 +304,7 @@ export function SchedulePreferences({
                           type="time"
                           step={60}
                           value={formatMinutesAsTime(range.endMinutes)}
+                          aria-label={`End time for range ${index + 1}`}
                           onChange={(event) => {
                             const parsed = parseTimeToMinutes(
                               event.currentTarget.value,

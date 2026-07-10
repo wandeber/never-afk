@@ -1,20 +1,53 @@
-import { SettingsForm } from "./settings/SettingsForm";
+import { useAppearance } from "./appearance";
 import { useAppController } from "./hooks/useAppController";
-import { formatRuntimeNote } from "./runtimeLabels";
+import { OverviewPanel } from "./overview/OverviewPanel";
+import { SettingsForm } from "./settings/SettingsForm";
+import type { AppearancePreference } from "./appearance";
+import type { SaveState } from "./types";
 import "./App.css";
 
+function saveStateLabel(
+  saveState: SaveState,
+  dirty: boolean,
+  busy: boolean,
+  saveError: string | null,
+) {
+  if (saveError) {
+    return "Changes could not be saved.";
+  }
+
+  if (busy || saveState === "saving") {
+    return "Saving changes…";
+  }
+
+  if (dirty) {
+    return "Changes waiting to save…";
+  }
+
+  if (saveState === "saved") {
+    return "All changes saved.";
+  }
+
+  return "Changes save automatically.";
+}
+
 function App() {
+  const { appearance, setAppearance } = useAppearance();
   const {
     serverState,
     runtimeSnapshot,
     updateSnapshot,
     draftConfig,
+    initialLoadError,
     busy,
     dirty,
     saveError,
     saveState,
     permissionBusy,
-    permissionNote,
+    permissionFeedback,
+    updateActionKind,
+    lastFailedUpdateAction,
+    retryInitialLoad,
     requestPermission,
     revealPermissionTarget,
     checkForUpdates,
@@ -22,82 +55,110 @@ function App() {
     handleConfigChange,
   } = useAppController();
 
-  if (!serverState || !draftConfig) {
+  if (!serverState || !draftConfig || !runtimeSnapshot) {
     return (
       <main className="app-shell loading-shell">
-        <section className="content-shell content-shell-loading">
-          <div className="compact-header">
-            <div>
-              <p className="eyebrow">never-afk</p>
-              <h1 className="screen-title">Loading</h1>
-            </div>
+        <section className="loading-card" aria-live="polite">
+          <div className="brand-mark" aria-hidden="true">
+            <span />
           </div>
+          {initialLoadError ? (
+            <>
+              <p className="section-kicker">never-afk</p>
+              <h1>Couldn’t open settings</h1>
+              <p className="loading-error" role="alert">
+                {initialLoadError}
+              </p>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={retryInitialLoad}
+              >
+                Retry
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="section-kicker">never-afk</p>
+              <h1>Starting…</h1>
+              <p>Reading your settings and current activity status.</p>
+              <span className="loading-indicator" aria-hidden="true" />
+            </>
+          )}
         </section>
       </main>
     );
   }
 
+  const update = updateSnapshot ?? serverState.update;
+
   return (
     <main className="app-shell">
-      <section className="content-shell">
-        <header className="compact-header">
-          <div>
-            <p className="eyebrow">never-afk</p>
-            <h1 className="screen-title">Settings</h1>
-            <p className="screen-summary">
-              Configure startup behavior, schedule windows, idle delays and the
-              synthetic key used by the resident engine.
-            </p>
+      <header className="app-header">
+        <div className="brand-lockup">
+          <div className="brand-mark" aria-hidden="true">
+            <span />
           </div>
-        </header>
-
-        <div className="content-body">
-          {runtimeSnapshot?.lastError ? (
-            <p className="status-banner" role="status">
-              {runtimeSnapshot.lastError}
-            </p>
-          ) : null}
-
-          <SettingsForm
-            config={draftConfig}
-            customInputLabel={serverState.customInputLabel}
-            safeKeyOptions={serverState.safeKeyOptions}
-            syntheticInputAccess={serverState.syntheticInputAccess}
-            update={updateSnapshot ?? serverState.update}
-            busy={busy}
-            dirty={dirty}
-            saveError={saveError}
-            saveState={saveState}
-            permissionBusy={permissionBusy}
-            permissionNote={permissionNote}
-            onRequestSyntheticInputAccess={requestPermission}
-            onRevealSyntheticInputAccessTarget={revealPermissionTarget}
-            onCheckForUpdates={checkForUpdates}
-            onInstallUpdate={installAvailableUpdate}
-            onChange={handleConfigChange}
-          />
+          <div>
+            <strong>never-afk</strong>
+            <span>Idle activity control</span>
+          </div>
         </div>
 
-        <footer className="footer-strip" aria-label="Runtime status">
-          <span>
-            Status{" "}
-            <strong>{runtimeSnapshot?.statusLabel ?? "Bootstrapping"}</strong>
-          </span>
-          <span>
-            {runtimeSnapshot
-              ? formatRuntimeNote(runtimeSnapshot)
-              : "Preparing runtime status"}
-          </span>
-          <span>
-            Current key{" "}
-            <strong>
-              {runtimeSnapshot?.resolvedInputLabel ??
-                serverState.config.selectedKey}
-            </strong>
-          </span>
-          <span>Local only</span>
-        </footer>
-      </section>
+        <div className="header-controls">
+          <p className="autosave-status" role="status" aria-live="polite">
+            {saveStateLabel(saveState, dirty, busy, saveError)}
+          </p>
+          <label className="appearance-control">
+            <span>Appearance</span>
+            <select
+              aria-label="Appearance"
+              value={appearance}
+              onChange={(event) =>
+                setAppearance(
+                  event.currentTarget.value as AppearancePreference,
+                )
+              }
+            >
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
+        </div>
+      </header>
+
+      <div className="content-body">
+        {saveError ? (
+          <div className="status-banner" role="alert">
+            <strong>Changes weren’t saved.</strong>
+            <span>{saveError}</span>
+          </div>
+        ) : null}
+
+        <OverviewPanel
+          config={draftConfig}
+          runtime={runtimeSnapshot}
+          syntheticInputAccess={serverState.syntheticInputAccess}
+          update={update}
+          permissionBusy={permissionBusy}
+          permissionFeedback={permissionFeedback}
+          updateActionKind={updateActionKind}
+          lastFailedUpdateAction={lastFailedUpdateAction}
+          onConfigChange={handleConfigChange}
+          onRequestSyntheticInputAccess={requestPermission}
+          onRevealSyntheticInputAccessTarget={revealPermissionTarget}
+          onCheckForUpdates={checkForUpdates}
+          onInstallUpdate={installAvailableUpdate}
+        />
+
+        <SettingsForm
+          config={draftConfig}
+          customInputLabel={serverState.customInputLabel}
+          safeKeyOptions={serverState.safeKeyOptions}
+          onChange={handleConfigChange}
+        />
+      </div>
     </main>
   );
 }

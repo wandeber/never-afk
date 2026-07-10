@@ -18,8 +18,10 @@ import {
 import type {
   AppConfig,
   FrontendState,
+  PermissionFeedback,
   RuntimeSnapshot,
   SaveState,
+  UpdateActionKind,
   UpdateSnapshot,
 } from "../types";
 
@@ -39,6 +41,15 @@ function actionErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+type ActiveUpdateAction = {
+  id: number;
+  kind: UpdateActionKind;
+};
+
+type ServerStateSource =
+  | { kind: "updateAction" }
+  | { kind: "nonUpdate"; updateGenerationAtRequestStart: number };
+
 const RUNTIME_REFRESH_INTERVAL_MS = 30_000;
 
 export function useAppController() {
@@ -49,13 +60,25 @@ export function useAppController() {
     null,
   );
   const [draftConfig, setDraftConfig] = useState<AppConfig | null>(null);
+  const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [permissionBusy, setPermissionBusy] = useState(false);
-  const [permissionNote, setPermissionNote] = useState<string | null>(null);
+  const [permissionFeedback, setPermissionFeedback] =
+    useState<PermissionFeedback | null>(null);
+  const [updateActionKind, setUpdateActionKind] =
+    useState<UpdateActionKind | null>(null);
+  const [lastFailedUpdateAction, setLastFailedUpdateAction] =
+    useState<UpdateActionKind | null>(null);
   const latestDraftRef = useRef<AppConfig | null>(null);
   const localEditGenerationRef = useRef(0);
+  const mountedRef = useRef(false);
+  const nextUpdateActionIdRef = useRef(0);
+  const activeUpdateActionRef = useRef<ActiveUpdateAction | null>(null);
+  const updateGenerationRef = useRef(0);
+  const previousPermissionGrantedRef = useRef<boolean | null>(null);
 
   const dirty =
     !!serverState &&
@@ -63,11 +86,29 @@ export function useAppController() {
     serializeConfig(serverState.config) !== serializeConfig(draftConfig);
 
   const applyServerState = useEffectEvent(
-    (nextState: FrontendState, preserveDraft: boolean) => {
+    (
+      nextState: FrontendState,
+      preserveDraft: boolean,
+      source: ServerStateSource,
+    ) => {
       startTransition(() => {
         setServerState(nextState);
         setRuntimeSnapshot(nextState.runtime);
-        setUpdateSnapshot(nextState.update);
+
+        const updateSnapshotIsCurrent =
+          source.kind === "updateAction" ||
+          (!activeUpdateActionRef.current &&
+            source.updateGenerationAtRequestStart ===
+              updateGenerationRef.current);
+
+        // Every non-update request captures the update generation before it
+        // starts. A local update advances that generation on both start and
+        // completion, so responses that span the action cannot later restore
+        // an older Checking/Downloading snapshot after the terminal result.
+        if (updateSnapshotIsCurrent) {
+          setUpdateSnapshot(nextState.update);
+        }
+
         setDraftConfig((currentDraft) => {
           if (!preserveDraft || !currentDraft) {
             latestDraftRef.current = nextState.config;
@@ -82,6 +123,7 @@ export function useAppController() {
 
   const persistDraft = useEffectEvent(async (configToSave: AppConfig) => {
     const submittedDraft = serializeConfig(configToSave);
+    const updateGenerationAtRequestStart = updateGenerationRef.current;
 
     setBusy(true);
     setSaveError(null);
@@ -96,7 +138,10 @@ export function useAppController() {
       // If the user changed something else while the request was in flight, we
       // keep the newer local draft on screen and let the next debounce cycle
       // persist it instead of restoring stale data from the server response.
-      applyServerState(nextState, hasNewerDraft);
+      applyServerState(nextState, hasNewerDraft, {
+        kind: "nonUpdate",
+        updateGenerationAtRequestStart,
+      });
       setSaveState("saved");
     } catch (error) {
       setSaveError(
@@ -109,88 +154,158 @@ export function useAppController() {
   });
 
   const requestPermission = useEffectEvent(async () => {
+    const updateGenerationAtRequestStart = updateGenerationRef.current;
     setPermissionBusy(true);
-    setPermissionNote(null);
+    setPermissionFeedback(null);
 
     try {
       const nextState = await requestSyntheticInputAccess();
-      applyServerState(nextState, true);
+      applyServerState(nextState, true, {
+        kind: "nonUpdate",
+        updateGenerationAtRequestStart,
+      });
 
-      setPermissionNote(
-        nextState.syntheticInputAccess.granted
-          ? "Accessibility access is enabled. Scheduled synthetic keys can now be delivered to other apps."
-          : "System Settings should now be open. If approval is still missing, add the exact binary shown below and retry.",
-      );
+      setPermissionFeedback({
+        kind: "info",
+        message: nextState.syntheticInputAccess.granted
+          ? "Accessibility access is enabled. Synthetic keys can now reach other apps."
+          : "System Settings is open. Turn on never-afk, then return here; access refreshes automatically.",
+      });
     } catch (error) {
-      setPermissionNote(
-        error instanceof Error
-          ? error.message
-          : "The permission request could not be completed.",
-      );
+      setPermissionFeedback({
+        kind: "error",
+        message: actionErrorMessage(
+          error,
+          "The permission request could not be completed.",
+        ),
+      });
     } finally {
       setPermissionBusy(false);
     }
   });
 
   const revealPermissionTarget = useEffectEvent(async () => {
+    const updateGenerationAtRequestStart = updateGenerationRef.current;
     setPermissionBusy(true);
-    setPermissionNote(null);
+    setPermissionFeedback(null);
 
     try {
       const nextState = await revealSyntheticInputAccessTarget();
-      applyServerState(nextState, true);
-      setPermissionNote(
-        "Finder is revealing the exact binary that macOS must authorize in Accessibility.",
-      );
+      applyServerState(nextState, true, {
+        kind: "nonUpdate",
+        updateGenerationAtRequestStart,
+      });
+      setPermissionFeedback({
+        kind: "info",
+        message:
+          "Finder is showing the exact never-afk executable that macOS must allow.",
+      });
     } catch (error) {
-      setPermissionNote(
-        error instanceof Error
-          ? error.message
-          : "The current executable could not be revealed in Finder.",
-      );
+      setPermissionFeedback({
+        kind: "error",
+        message: actionErrorMessage(
+          error,
+          "The current executable could not be revealed in Finder.",
+        ),
+      });
     } finally {
       setPermissionBusy(false);
     }
   });
 
-  const checkForUpdates = useEffectEvent(async () => {
-    try {
-      const nextState = await checkForUpdate();
-      applyServerState(nextState, true);
-    } catch (error) {
+  const runUpdateAction = useEffectEvent(
+    async (
+      kind: UpdateActionKind,
+      optimisticPhase: UpdateSnapshot["phase"],
+      command: () => Promise<FrontendState>,
+    ) => {
+      // React has not necessarily rendered the disabled button between two
+      // synchronous clicks, so the ref is the authoritative duplicate guard.
+      if (activeUpdateActionRef.current) {
+        return;
+      }
+
+      const action: ActiveUpdateAction = {
+        id: ++nextUpdateActionIdRef.current,
+        kind,
+      };
+      activeUpdateActionRef.current = action;
+      updateGenerationRef.current += 1;
+      setUpdateActionKind(kind);
+      setLastFailedUpdateAction(null);
       setUpdateSnapshot((current) =>
         current
           ? {
               ...current,
-              phase: "error",
-              lastError: actionErrorMessage(error, "Update check failed."),
+              phase: optimisticPhase,
+              downloadedBytes: kind === "install" ? 0 : null,
+              contentLengthBytes: null,
+              lastError: null,
             }
           : current,
       );
-    }
+
+      try {
+        const nextState = await command();
+        if (!mountedRef.current || activeUpdateActionRef.current !== action) {
+          return;
+        }
+
+        // An install that succeeds restarts the process and never reaches this
+        // branch. The response is still authoritative for checks and for the
+        // install edge case where the advertised update disappeared.
+        applyServerState(nextState, true, { kind: "updateAction" });
+        setLastFailedUpdateAction(null);
+      } catch (error) {
+        if (!mountedRef.current || activeUpdateActionRef.current !== action) {
+          return;
+        }
+
+        setLastFailedUpdateAction(kind);
+        setUpdateSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                phase: "error",
+                downloadedBytes: null,
+                contentLengthBytes: null,
+                lastError: actionErrorMessage(
+                  error,
+                  kind === "install"
+                    ? "Update install failed."
+                    : "Update check failed.",
+                ),
+              }
+            : current,
+        );
+      } finally {
+        if (activeUpdateActionRef.current === action) {
+          // The second increment distinguishes responses started during the
+          // update from requests started after its terminal state is known.
+          updateGenerationRef.current += 1;
+          activeUpdateActionRef.current = null;
+          if (mountedRef.current) {
+            setUpdateActionKind(null);
+          }
+        }
+      }
+    },
+  );
+
+  const checkForUpdates = useEffectEvent(() => {
+    void runUpdateAction("check", "checking", checkForUpdate);
   });
 
-  const installAvailableUpdate = useEffectEvent(async () => {
-    try {
-      const nextState = await installUpdate();
-      applyServerState(nextState, true);
-    } catch (error) {
-      setUpdateSnapshot((current) =>
-        current
-          ? {
-              ...current,
-              phase: "error",
-              lastError: actionErrorMessage(error, "Update install failed."),
-            }
-          : current,
-      );
-    }
+  const installAvailableUpdate = useEffectEvent(() => {
+    void runUpdateAction("install", "downloading", installUpdate);
   });
 
   const refreshRuntimeSnapshot = useEffectEvent(async () => {
     try {
       const nextRuntime = await getRuntimeSnapshot();
-      setRuntimeSnapshot(nextRuntime);
+      if (mountedRef.current) {
+        setRuntimeSnapshot(nextRuntime);
+      }
     } catch {
       // Runtime polling is best-effort. We keep the last known snapshot if a
       // refresh fails rather than interrupting the settings workflow.
@@ -198,8 +313,18 @@ export function useAppController() {
   });
 
   useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      activeUpdateActionRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     const requestEditGeneration = localEditGenerationRef.current;
+    setInitialLoadError(null);
 
     void (async () => {
       try {
@@ -221,10 +346,11 @@ export function useAppController() {
         }
       } catch (error) {
         if (!cancelled) {
-          setSaveError(
-            error instanceof Error
-              ? error.message
-              : "Failed to load the initial application state.",
+          setInitialLoadError(
+            actionErrorMessage(
+              error,
+              "Failed to load the initial application state.",
+            ),
           );
         }
       }
@@ -233,16 +359,15 @@ export function useAppController() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAttempt]);
 
   useEffect(() => {
     if (!serverState) {
       return undefined;
     }
 
-    // Runtime status now uses absolute deadlines instead of a visible countdown,
+    // Runtime status uses absolute deadlines instead of a visible countdown,
     // so a low-frequency refresh is enough when the settings window is open.
-    // Direct user actions still receive fresh state from their command results.
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== "visible") {
         return;
@@ -263,9 +388,14 @@ export function useAppController() {
       }
 
       void (async () => {
+        const updateGenerationAtRequestStart = updateGenerationRef.current;
+
         try {
           const nextState = await getFrontendState();
-          applyServerState(nextState, true);
+          applyServerState(nextState, true, {
+            kind: "nonUpdate",
+            updateGenerationAtRequestStart,
+          });
         } catch {
           // Returning from System Settings should not surface a noisy error if
           // the refresh misses once; the user can retry the permission flow.
@@ -287,8 +417,8 @@ export function useAppController() {
       return undefined;
     }
 
-    // Config changes are still autosaved with a short debounce so the form
-    // feels like a native preferences pane instead of a manual submit flow.
+    // Config changes are autosaved with a short debounce so the form feels like
+    // a native preferences pane instead of a manual submit workflow.
     const timeoutId = window.setTimeout(() => {
       void persistDraft(draftConfig);
     }, 250);
@@ -299,14 +429,31 @@ export function useAppController() {
   }, [busy, dirty, draftConfig, persistDraft]);
 
   useEffect(() => {
-    if (!serverState?.syntheticInputAccess.granted || !permissionNote) {
+    const granted = serverState?.syntheticInputAccess.granted;
+    if (granted === undefined) {
       return;
     }
 
-    // Once macOS reports that posting synthetic events is allowed again, any
-    // earlier helper text about opening System Settings is stale noise.
-    setPermissionNote(null);
-  }, [permissionNote, serverState?.syntheticInputAccess.granted]);
+    const previouslyGranted = previousPermissionGrantedRef.current;
+    previousPermissionGrantedRef.current = granted;
+
+    // Only the informational guidance that told the user to approve access is
+    // stale on the denied-to-granted transition. Errors from the Finder helper
+    // or a permission request remain actionable even when access is already
+    // granted, so clearing all feedback here would hide real failures.
+    if (
+      previouslyGranted === false &&
+      granted &&
+      permissionFeedback?.kind === "info"
+    ) {
+      setPermissionFeedback(null);
+    }
+  }, [permissionFeedback, serverState?.syntheticInputAccess.granted]);
+
+  const retryInitialLoad = useEffectEvent(() => {
+    setInitialLoadError(null);
+    setLoadAttempt((current) => current + 1);
+  });
 
   const handleConfigChange = useEffectEvent((nextConfig: AppConfig) => {
     localEditGenerationRef.current += 1;
@@ -321,12 +468,16 @@ export function useAppController() {
     runtimeSnapshot,
     updateSnapshot,
     draftConfig,
+    initialLoadError,
     busy,
     dirty,
     saveError,
     saveState,
     permissionBusy,
-    permissionNote,
+    permissionFeedback,
+    updateActionKind,
+    lastFailedUpdateAction,
+    retryInitialLoad,
     requestPermission,
     revealPermissionTarget,
     checkForUpdates,

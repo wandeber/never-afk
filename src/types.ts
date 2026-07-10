@@ -18,6 +18,11 @@ export type SafeKeyPreset =
 
 export type ActivityMethod = "keyboard";
 export type SaveState = "idle" | "saving" | "saved";
+export type PermissionFeedback = {
+  kind: "info" | "error";
+  message: string;
+};
+export type UpdateActionKind = "check" | "install";
 export type ScheduleWeekday =
   | "Mon"
   | "Tue"

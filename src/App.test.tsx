@@ -8,12 +8,14 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import { APPEARANCE_STORAGE_KEY } from "./appearance";
 import type {
   AppConfig,
   FrontendState,
   RuntimeSnapshot,
   ScheduleRange,
   SyntheticInputAccessState,
+  UpdateSnapshot,
 } from "./types";
 
 const apiMocks = vi.hoisted(() => ({
@@ -26,6 +28,11 @@ const apiMocks = vi.hoisted(() => ({
   saveConfig: vi.fn<(config: AppConfig) => Promise<FrontendState>>(),
 }));
 
+const nativeWindowMocks = vi.hoisted(() => ({
+  getCurrentWindow: vi.fn(),
+  setTheme: vi.fn<(theme: "light" | "dark" | null) => Promise<void>>(),
+}));
+
 vi.mock("./api", () => ({
   checkForUpdate: apiMocks.checkForUpdate,
   getFrontendState: apiMocks.getFrontendState,
@@ -34,6 +41,10 @@ vi.mock("./api", () => ({
   revealSyntheticInputAccessTarget: apiMocks.revealSyntheticInputAccessTarget,
   requestSyntheticInputAccess: apiMocks.requestSyntheticInputAccess,
   saveConfig: apiMocks.saveConfig,
+}));
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: nativeWindowMocks.getCurrentWindow,
 }));
 
 const {
@@ -45,6 +56,47 @@ const {
   requestSyntheticInputAccess,
   saveConfig,
 } = apiMocks;
+const { getCurrentWindow, setTheme } = nativeWindowMocks;
+
+let systemPrefersDark = false;
+let mediaChangeListeners = new Set<(event: MediaQueryListEvent) => void>();
+
+function setSystemAppearance(dark: boolean) {
+  systemPrefersDark = dark;
+  const event = { matches: dark } as MediaQueryListEvent;
+  mediaChangeListeners.forEach((listener) => listener(event));
+}
+
+function installMatchMediaMock() {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: systemPrefersDark,
+      media: query,
+      onchange: null,
+      addEventListener: (
+        type: string,
+        listener: (event: MediaQueryListEvent) => void,
+      ) => {
+        if (type === "change") {
+          mediaChangeListeners.add(listener);
+        }
+      },
+      removeEventListener: (
+        type: string,
+        listener: (event: MediaQueryListEvent) => void,
+      ) => {
+        if (type === "change") {
+          mediaChangeListeners.delete(listener);
+        }
+      },
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
 
 function makeRuntimeSnapshot(
   overrides: Partial<RuntimeSnapshot> = {},
@@ -74,18 +126,21 @@ function makeScheduleRange(
   };
 }
 
-function makeUpdateSnapshot() {
+function makeUpdateSnapshot(
+  overrides: Partial<UpdateSnapshot> = {},
+): UpdateSnapshot {
   return {
-    channel: "stable" as const,
+    channel: "stable",
     configured: true,
-    phase: "idle" as const,
-    currentVersion: "0.1.2",
+    phase: "idle",
+    currentVersion: "0.1.4",
     availableVersion: null,
     notes: null,
     downloadedBytes: null,
     contentLengthBytes: null,
     lastCheckedEpochMs: null,
     lastError: null,
+    ...overrides,
   };
 }
 
@@ -115,6 +170,7 @@ function makeFrontendState(
   configOverrides: Partial<AppConfig> = {},
   runtimeOverrides: Partial<RuntimeSnapshot> = {},
   accessOverrides: Partial<SyntheticInputAccessState> = {},
+  updateOverrides: Partial<UpdateSnapshot> = {},
 ): FrontendState {
   const config = makeConfig(configOverrides);
 
@@ -124,7 +180,7 @@ function makeFrontendState(
       resolvedInputLabel: config.selectedKey,
       ...runtimeOverrides,
     }),
-    update: makeUpdateSnapshot(),
+    update: makeUpdateSnapshot(updateOverrides),
     safeKeyOptions: [
       { id: "Fn", label: "Fn", supported: true },
       { id: "A", label: "A", supported: true },
@@ -140,19 +196,44 @@ function makeFrontendState(
       granted: false,
       canRequest: true,
       targetPath:
-        "/Users/wandeber/Projects/Personal/never-afk/src-tauri/target/debug/never-afk",
+        "/Users/example/never-afk/src-tauri/target/debug/never-afk",
       ...accessOverrides,
     },
   };
 }
 
+function openAdvancedSettings() {
+  const advancedLabel = screen.getByText("Advanced");
+  const summary = advancedLabel.closest("summary");
+  if (!summary) {
+    throw new Error("Advanced settings summary was not rendered.");
+  }
+  fireEvent.click(summary);
+}
+
+async function waitForApp() {
+  return screen.findByRole("heading", { name: "How never-afk behaves" });
+}
+
 describe("App", () => {
   afterEach(() => {
     cleanup();
+    window.localStorage.clear();
+    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.style.removeProperty("color-scheme");
+    mediaChangeListeners.clear();
   });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    getCurrentWindow.mockReset();
+    setTheme.mockReset();
+    setTheme.mockResolvedValue(undefined);
+    getCurrentWindow.mockReturnValue({ setTheme });
+    systemPrefersDark = false;
+    mediaChangeListeners = new Set();
+    installMatchMediaMock();
+    window.localStorage.clear();
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -161,8 +242,12 @@ describe("App", () => {
 
     getFrontendState.mockResolvedValue(makeFrontendState());
     getRuntimeSnapshot.mockResolvedValue(makeRuntimeSnapshot());
-    checkForUpdate.mockResolvedValue(makeFrontendState());
-    installUpdate.mockResolvedValue(makeFrontendState());
+    checkForUpdate.mockResolvedValue(
+      makeFrontendState({}, {}, {}, { phase: "notAvailable" }),
+    );
+    installUpdate.mockResolvedValue(
+      makeFrontendState({}, {}, {}, { phase: "notAvailable" }),
+    );
     revealSyntheticInputAccessTarget.mockResolvedValue(makeFrontendState());
     requestSyntheticInputAccess.mockResolvedValue(
       makeFrontendState({}, {}, { granted: true }),
@@ -174,10 +259,12 @@ describe("App", () => {
 
   it("keeps the selected key change instead of reverting to F15", async () => {
     render(<App />);
+    await waitForApp();
+    openAdvancedSettings();
 
-    expect(await screen.findByText("Settings")).toBeTruthy();
-
-    const presetKeySelect = await screen.findByRole("combobox");
+    const presetKeySelect = screen.getByRole("combobox", {
+      name: "Synthetic key",
+    });
     expect((presetKeySelect as HTMLSelectElement).value).toBe("F15");
 
     fireEvent.change(presetKeySelect, { target: { value: "A" } });
@@ -192,22 +279,13 @@ describe("App", () => {
         expect.objectContaining({ selectedKey: "A" }),
       ),
     );
-
-    await waitFor(() =>
-      expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe(
-        "A",
-      ),
-    );
-    expect(screen.getByText(/Current key/i).textContent).toContain("A");
+    expect(
+      screen.getByLabelText("Current activity configuration").textContent,
+    ).toContain("A");
   }, 10000);
 
   it("polls runtime updates without resetting the current key selection", async () => {
     vi.useFakeTimers();
-    getFrontendState.mockReset();
-    getRuntimeSnapshot.mockReset();
-    getFrontendState
-      .mockResolvedValueOnce(makeFrontendState())
-      .mockResolvedValue(makeFrontendState({ selectedKey: "A" }));
     getRuntimeSnapshot.mockResolvedValue(
       makeRuntimeSnapshot({
         nextCheckInSeconds: 45,
@@ -217,34 +295,99 @@ describe("App", () => {
 
     try {
       render(<App />);
-
       await act(async () => {
         await Promise.resolve();
       });
+      openAdvancedSettings();
 
-      const presetKeySelect = screen.getByRole("combobox");
+      const presetKeySelect = screen.getByRole("combobox", {
+        name: "Synthetic key",
+      });
       fireEvent.change(presetKeySelect, { target: { value: "A" } });
 
       await act(async () => {
         vi.advanceTimersByTime(350);
         await Promise.resolve();
-      });
-
-      await act(async () => {
         vi.advanceTimersByTime(30_000);
         await Promise.resolve();
       });
 
       expect(getRuntimeSnapshot).toHaveBeenCalledTimes(1);
       expect(screen.getByText(/Next activity check/i)).toBeTruthy();
-      expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe(
-        "A",
-      );
-      expect(screen.getByText(/Current key/i).textContent).toContain("A");
+      expect((presetKeySelect as HTMLSelectElement).value).toBe("A");
     } finally {
       vi.useRealTimers();
     }
   }, 10000);
+
+  it("shows an initial load error and retries successfully", async () => {
+    getFrontendState.mockReset();
+    getFrontendState
+      .mockRejectedValueOnce(new Error("State service unavailable"))
+      .mockResolvedValueOnce(makeFrontendState());
+
+    render(<App />);
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "State service unavailable",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitForApp();
+    expect(getFrontendState).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the web theme functional when native theme synchronization fails", async () => {
+    render(<App />);
+    await waitForApp();
+
+    setTheme.mockRejectedValueOnce(new Error("Tauri bridge unavailable"));
+    const appearance = screen.getByRole("combobox", { name: "Appearance" });
+    fireEvent.change(appearance, { target: { value: "dark" } });
+
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(window.localStorage.getItem(APPEARANCE_STORAGE_KEY)).toBe("dark");
+  });
+
+  it("maps system, light, and dark appearance to the native Tauri theme", async () => {
+    render(<App />);
+    await waitForApp();
+
+    const appearance = screen.getByRole("combobox", { name: "Appearance" });
+
+    fireEvent.change(appearance, { target: { value: "dark" } });
+    await waitFor(() => expect(setTheme).toHaveBeenLastCalledWith("dark"));
+
+    fireEvent.change(appearance, { target: { value: "light" } });
+    await waitFor(() => expect(setTheme).toHaveBeenLastCalledWith("light"));
+
+    fireEvent.change(appearance, { target: { value: "system" } });
+    await waitFor(() => expect(setTheme).toHaveBeenLastCalledWith(null));
+  });
+
+  it("uses system appearance and falls back from an invalid stored value", async () => {
+    window.localStorage.setItem(APPEARANCE_STORAGE_KEY, "sepia");
+    render(<App />);
+    await waitForApp();
+
+    const appearance = screen.getByRole("combobox", { name: "Appearance" });
+    expect((appearance as HTMLSelectElement).value).toBe("system");
+    expect(document.documentElement.dataset.theme).toBe("light");
+
+    act(() => setSystemAppearance(true));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: APPEARANCE_STORAGE_KEY,
+          newValue: "light",
+        }),
+      );
+    });
+    expect((appearance as HTMLSelectElement).value).toBe("light");
+    expect(document.documentElement.dataset.theme).toBe("light");
+  });
 
   it("refreshes accessibility access after the window regains focus", async () => {
     getFrontendState.mockReset();
@@ -256,10 +399,6 @@ describe("App", () => {
       document,
       "visibilityState",
     );
-
-    // The refresh-on-return flow is gated on the window being visible, so the
-    // test pins the document state to the same value a foreground Tauri window
-    // reports after the user comes back from System Settings.
     Object.defineProperty(document, "visibilityState", {
       configurable: true,
       value: "visible",
@@ -267,18 +406,20 @@ describe("App", () => {
 
     try {
       render(<App />);
-
-      await screen.findByRole("button", { name: "Request Access" });
-
-      act(() => {
-        window.dispatchEvent(new Event("focus"));
+      await screen.findByRole("button", {
+        name: "Open Accessibility Settings",
       });
+
+      act(() => window.dispatchEvent(new Event("focus")));
 
       await waitFor(() =>
         expect(
-          screen.getByRole("button", { name: "Access Granted" }),
-        ).toBeTruthy(),
+          screen.queryByRole("button", {
+            name: "Open Accessibility Settings",
+          }),
+        ).toBeNull(),
       );
+      expect(screen.getByText("Ready")).toBeTruthy();
       expect(getFrontendState).toHaveBeenCalledTimes(2);
     } finally {
       if (previousVisibilityState) {
@@ -291,82 +432,93 @@ describe("App", () => {
         Reflect.deleteProperty(document, "visibilityState");
       }
     }
-  }, 10000);
+  });
 
-  it("requests macOS accessibility access from the permissions section", async () => {
+  it("opens macOS accessibility settings and exposes Finder troubleshooting", async () => {
     render(<App />);
 
-    const requestButtons = await screen.findAllByRole("button", {
-      name: "Request Access",
+    const requestButton = await screen.findByRole("button", {
+      name: "Open Accessibility Settings",
     });
-    fireEvent.click(requestButtons[0]!);
-
+    fireEvent.click(requestButton);
     await waitFor(() =>
       expect(requestSyntheticInputAccess).toHaveBeenCalledTimes(1),
     );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Access Granted" }),
-      ).toBeTruthy(),
-    );
-  }, 10000);
 
-  it("reveals the current dev binary from the permissions section", async () => {
+    getFrontendState.mockResolvedValue(makeFrontendState());
+    requestSyntheticInputAccess.mockResolvedValue(makeFrontendState());
+    cleanup();
     render(<App />);
-
-    const revealButtons = await screen.findAllByRole("button", {
-      name: "Reveal Binary",
-    });
-    fireEvent.click(revealButtons[0]!);
-
+    await waitForApp();
+    fireEvent.click(screen.getByText("Troubleshooting"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show never-afk in Finder" }),
+    );
     await waitFor(() =>
       expect(revealSyntheticInputAccessTarget).toHaveBeenCalledTimes(1),
     );
-  }, 10000);
+  });
 
-  it("persists the menu-bar last event visibility toggle", async () => {
+  it("keeps Finder errors visible when accessibility access is already granted", async () => {
+    getFrontendState.mockResolvedValueOnce(
+      makeFrontendState({}, {}, { granted: true }),
+    );
+    revealSyntheticInputAccessTarget.mockRejectedValueOnce(
+      new Error("Finder could not reveal never-afk"),
+    );
+
     render(<App />);
+    await waitForApp();
 
-    await screen.findByText("Show last event in menu bar");
+    fireEvent.click(screen.getByText("Troubleshooting"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show never-afk in Finder" }),
+    );
 
-    const showLastEventCheckbox = screen
-      .getByText("Show last event in menu bar")
-      .closest(".preference-row")
-      ?.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Finder could not reveal never-afk",
+    );
+    expect(screen.getByText("Ready")).toBeTruthy();
+  });
 
-    expect(showLastEventCheckbox?.checked).toBe(true);
+  it("omits macOS permission UI on unsupported platforms", async () => {
+    getFrontendState.mockResolvedValueOnce(
+      makeFrontendState({}, {}, { supported: false, granted: true }),
+    );
+    render(<App />);
+    await waitForApp();
 
-    fireEvent.click(showLastEventCheckbox!);
+    expect(screen.queryByText("macOS permission")).toBeNull();
+  });
+
+  it("persists the named menu-bar visibility switch", async () => {
+    render(<App />);
+    await waitForApp();
+
+    const showLastEventSwitch = screen.getByRole("switch", {
+      name: "Show last event in menu bar",
+    });
+    expect((showLastEventSwitch as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(showLastEventSwitch);
 
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 350));
     });
-
     await waitFor(() =>
       expect(saveConfig).toHaveBeenCalledWith(
         expect.objectContaining({ showLastEventInMenuBar: false }),
       ),
     );
-  }, 10000);
+  });
 
-  it("persists schedule enablement and newly added ranges", async () => {
+  it("persists schedule enablement and uniquely labels range controls", async () => {
     render(<App />);
+    await waitForApp();
 
-    await screen.findByText("Use schedule");
-
-    const useScheduleCheckbox = screen
-      .getByText("Use schedule")
-      .closest(".preference-row")
-      ?.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
-
-    expect(useScheduleCheckbox?.checked).toBe(false);
-
-    fireEvent.click(useScheduleCheckbox!);
-
+    fireEvent.click(screen.getByRole("switch", { name: "Use schedule" }));
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 350));
     });
-
     await waitFor(() =>
       expect(saveConfig).toHaveBeenCalledWith(
         expect.objectContaining({ scheduleEnabled: true }),
@@ -374,21 +526,21 @@ describe("App", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Add Range" }));
+    expect(screen.getByRole("group", { name: "Days for range 1" })).toBeTruthy();
+    expect(screen.getByLabelText("Start time for range 1")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove range 1" })).toBeTruthy();
 
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 350));
     });
-
     await waitFor(() =>
       expect(saveConfig).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          scheduleRanges: [makeScheduleRange()],
-        }),
+        expect.objectContaining({ scheduleRanges: [makeScheduleRange()] }),
       ),
     );
   }, 10000);
 
-  it("shows a schedule note when automatic activity is outside schedule", async () => {
+  it("shows the next scheduled range in the primary runtime status", async () => {
     getFrontendState.mockResolvedValueOnce(
       makeFrontendState(
         {
@@ -403,10 +555,190 @@ describe("App", () => {
         },
       ),
     );
-
     render(<App />);
 
-    expect(await screen.findByText("Settings")).toBeTruthy();
-    expect(screen.getByText(/Next scheduled range/i)).toBeTruthy();
+    expect(await screen.findByText(/Next scheduled range/i)).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Outside schedule" }),
+    ).toBeTruthy();
+  });
+
+  it("surfaces an available update, release notes, and explicit install", async () => {
+    const availableState = makeFrontendState(
+      {},
+      {},
+      {},
+      {
+        phase: "available",
+        availableVersion: "0.2.0",
+        notes: "Improved schedule controls and reliability.",
+      },
+    );
+    getFrontendState.mockResolvedValueOnce(availableState);
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Version 0.2.0 is ready" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Improved schedule controls and reliability."),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download and Install" }),
+    );
+    await waitFor(() => expect(installUpdate).toHaveBeenCalledTimes(1));
+  });
+
+  it("guards duplicate update checks and preserves optimistic state over focus refresh", async () => {
+    let resolveCheck: ((state: FrontendState) => void) | undefined;
+    checkForUpdate.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCheck = resolve;
+      }),
+    );
+    getFrontendState.mockReset();
+    getFrontendState
+      .mockResolvedValueOnce(makeFrontendState())
+      .mockResolvedValueOnce(makeFrontendState());
+
+    render(<App />);
+    const checkButton = await screen.findByRole("button", {
+      name: "Check for Updates",
+    });
+    fireEvent.click(checkButton);
+    fireEvent.click(checkButton);
+
+    expect(checkForUpdate).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("heading", { name: "Checking for updates" }),
+    ).toBeTruthy();
+
+    act(() => window.dispatchEvent(new Event("focus")));
+    await waitFor(() => expect(getFrontendState).toHaveBeenCalledTimes(2));
+    expect(
+      screen.getByRole("heading", { name: "Checking for updates" }),
+    ).toBeTruthy();
+
+    act(() => {
+      resolveCheck?.(
+        makeFrontendState({}, {}, {}, { phase: "notAvailable" }),
+      );
+    });
+    expect(await screen.findByText("You're up to date")).toBeTruthy();
+  });
+
+  it("ignores a delayed focus snapshot that predates a completed update check", async () => {
+    let resolveFocusRefresh: ((state: FrontendState) => void) | undefined;
+    let resolveCheck: ((state: FrontendState) => void) | undefined;
+
+    getFrontendState.mockReset();
+    getFrontendState
+      .mockResolvedValueOnce(makeFrontendState())
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFocusRefresh = resolve;
+          }),
+      );
+    checkForUpdate.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCheck = resolve;
+      }),
+    );
+
+    render(<App />);
+    const checkButton = await screen.findByRole("button", {
+      name: "Check for Updates",
+    });
+
+    act(() => window.dispatchEvent(new Event("focus")));
+    await waitFor(() => expect(getFrontendState).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(checkButton);
+    expect(
+      screen.getByRole("heading", { name: "Checking for updates" }),
+    ).toBeTruthy();
+
+    await act(async () => {
+      resolveCheck?.(
+        makeFrontendState({}, {}, {}, { phase: "notAvailable" }),
+      );
+      await Promise.resolve();
+    });
+    expect(
+      await screen.findByRole("heading", { name: "You're up to date" }),
+    ).toBeTruthy();
+
+    await act(async () => {
+      // This idle snapshot was captured before the check began. Resolving it
+      // now must not replace the newer NotAvailable terminal state.
+      resolveFocusRefresh?.(makeFrontendState());
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "You're up to date" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Check for Updates" }),
+    ).toBeTruthy();
+  });
+
+  it("retries a locally failed installation instead of changing it into a check", async () => {
+    getFrontendState.mockResolvedValueOnce(
+      makeFrontendState(
+        {},
+        {},
+        {},
+        { phase: "available", availableVersion: "0.2.0" },
+      ),
+    );
+    installUpdate.mockRejectedValue(new Error("Signature verification failed"));
+    render(<App />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Download and Install" }),
+    );
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Signature verification failed",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry Installation" }),
+    );
+    await waitFor(() => expect(installUpdate).toHaveBeenCalledTimes(2));
+    expect(checkForUpdate).not.toHaveBeenCalled();
+  });
+
+  it("renders an unconfigured updater honestly without actions", async () => {
+    getFrontendState.mockResolvedValueOnce(
+      makeFrontendState({}, {}, {}, { configured: false }),
+    );
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Unavailable in this build" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Check for Updates" }),
+    ).toBeNull();
+  });
+
+  it("gives every primary setting a unique accessible name", async () => {
+    render(<App />);
+    await waitForApp();
+
+    expect(
+      screen.getByRole("switch", { name: "Automatic activity" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Start at login" })).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Use schedule" })).toBeTruthy();
+    expect(
+      screen.getByRole("spinbutton", { name: "Wait before monitoring" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("spinbutton", { name: "Confirm inactivity" }),
+    ).toBeTruthy();
   });
 });
