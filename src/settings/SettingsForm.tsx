@@ -222,31 +222,37 @@ export const SettingsForm = memo(function SettingsForm({
             title="Synthetic key"
             description="Choose a safe key that is unlikely to interfere with your work."
           >
-            <select
-              id="preset-key"
-              className="preference-input"
-              value={config.selectedKey}
-              disabled={config.customInputEnabled}
-              aria-describedby="preset-key-description"
-              onChange={(event) =>
-                onChange({
-                  ...config,
-                  selectedKey: event.currentTarget.value as SafeKeyPreset,
-                })
-              }
+            <span
+              className={`select-control${
+                config.customInputEnabled ? " select-control-disabled" : ""
+              }`}
             >
-              {safeKeyOptions.map((option) => (
-                <option
-                  key={option.id}
-                  value={option.id}
-                  disabled={!option.supported}
-                >
-                  {option.supported
-                    ? option.label
-                    : `${option.label} (unsupported here)`}
-                </option>
-              ))}
-            </select>
+              <select
+                id="preset-key"
+                className="preference-input preference-select"
+                value={config.selectedKey}
+                disabled={config.customInputEnabled}
+                aria-describedby="preset-key-description"
+                onChange={(event) =>
+                  onChange({
+                    ...config,
+                    selectedKey: event.currentTarget.value as SafeKeyPreset,
+                  })
+                }
+              >
+                {safeKeyOptions.map((option) => (
+                  <option
+                    key={option.id}
+                    value={option.id}
+                    disabled={!option.supported}
+                  >
+                    {option.supported
+                      ? option.label
+                      : `${option.label} (unsupported here)`}
+                  </option>
+                ))}
+              </select>
+            </span>
           </PreferenceRow>
 
           <PreferenceRow

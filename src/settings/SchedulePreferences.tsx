@@ -232,9 +232,7 @@ export function SchedulePreferences({
                 </div>
 
                 <div className="schedule-card-grid">
-                  <div className="schedule-field">
-                    <span className="schedule-field-label">Days</span>
-
+                  <div className="schedule-field schedule-field-days">
                     <div
                       className="weekday-toggle-grid"
                       role="group"
@@ -270,9 +268,7 @@ export function SchedulePreferences({
                     </div>
                   </div>
 
-                  <div className="schedule-field">
-                    <span className="schedule-field-label">Time</span>
-
+                  <div className="schedule-field schedule-field-time">
                     <div className="schedule-time-grid">
                       <label className="schedule-time-field">
                         <span>Start</span>

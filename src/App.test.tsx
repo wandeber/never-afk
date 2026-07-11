@@ -284,6 +284,42 @@ describe("App", () => {
     ).toContain("A");
   }, 10000);
 
+  it("keeps the runtime card visually aligned when activity is disabled", async () => {
+    render(<App />);
+    await waitForApp();
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Automatic activity" }),
+    );
+
+    expect(screen.getByRole("heading", { name: "Disabled" })).toBeTruthy();
+    expect(screen.getAllByText("Disabled").length).toBeGreaterThan(1);
+    expect(screen.queryByText("Idle monitoring is running.")).toBeNull();
+  });
+
+  it("keeps the runtime card visually aligned when activity is enabled", async () => {
+    getFrontendState.mockResolvedValueOnce(
+      makeFrontendState(
+        { enabled: false },
+        {
+          phase: "disabled",
+          statusLabel: "Disabled",
+          detailLabel: "The engine is disabled.",
+          nextRelevantEpochMs: null,
+        },
+      ),
+    );
+    render(<App />);
+    await waitForApp();
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Automatic activity" }),
+    );
+
+    expect(screen.getByRole("heading", { name: "Enabled" })).toBeTruthy();
+    expect(screen.queryByText("The engine is disabled.")).toBeNull();
+  });
+
   it("polls runtime updates without resetting the current key selection", async () => {
     vi.useFakeTimers();
     getRuntimeSnapshot.mockResolvedValue(
@@ -342,8 +378,9 @@ describe("App", () => {
     await waitForApp();
 
     setTheme.mockRejectedValueOnce(new Error("Tauri bridge unavailable"));
-    const appearance = screen.getByRole("combobox", { name: "Appearance" });
-    fireEvent.change(appearance, { target: { value: "dark" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use dark appearance" }),
+    );
 
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(window.localStorage.getItem(APPEARANCE_STORAGE_KEY)).toBe("dark");
@@ -353,16 +390,27 @@ describe("App", () => {
     render(<App />);
     await waitForApp();
 
-    const appearance = screen.getByRole("combobox", { name: "Appearance" });
+    const systemButton = screen.getByRole("button", {
+      name: "Use system appearance",
+    });
+    const lightButton = screen.getByRole("button", {
+      name: "Use light appearance",
+    });
+    const darkButton = screen.getByRole("button", {
+      name: "Use dark appearance",
+    });
 
-    fireEvent.change(appearance, { target: { value: "dark" } });
+    fireEvent.click(darkButton);
     await waitFor(() => expect(setTheme).toHaveBeenLastCalledWith("dark"));
+    expect(darkButton.getAttribute("aria-pressed")).toBe("true");
 
-    fireEvent.change(appearance, { target: { value: "light" } });
+    fireEvent.click(lightButton);
     await waitFor(() => expect(setTheme).toHaveBeenLastCalledWith("light"));
+    expect(lightButton.getAttribute("aria-pressed")).toBe("true");
 
-    fireEvent.change(appearance, { target: { value: "system" } });
+    fireEvent.click(systemButton);
     await waitFor(() => expect(setTheme).toHaveBeenLastCalledWith(null));
+    expect(systemButton.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("uses system appearance and falls back from an invalid stored value", async () => {
@@ -370,8 +418,13 @@ describe("App", () => {
     render(<App />);
     await waitForApp();
 
-    const appearance = screen.getByRole("combobox", { name: "Appearance" });
-    expect((appearance as HTMLSelectElement).value).toBe("system");
+    const systemButton = screen.getByRole("button", {
+      name: "Use system appearance",
+    });
+    const lightButton = screen.getByRole("button", {
+      name: "Use light appearance",
+    });
+    expect(systemButton.getAttribute("aria-pressed")).toBe("true");
     expect(document.documentElement.dataset.theme).toBe("light");
 
     act(() => setSystemAppearance(true));
@@ -385,7 +438,7 @@ describe("App", () => {
         }),
       );
     });
-    expect((appearance as HTMLSelectElement).value).toBe("light");
+    expect(lightButton.getAttribute("aria-pressed")).toBe("true");
     expect(document.documentElement.dataset.theme).toBe("light");
   });
 
@@ -407,7 +460,7 @@ describe("App", () => {
     try {
       render(<App />);
       await screen.findByRole("button", {
-        name: "Open Accessibility Settings",
+        name: "Review Accessibility",
       });
 
       act(() => window.dispatchEvent(new Event("focus")));
@@ -415,7 +468,7 @@ describe("App", () => {
       await waitFor(() =>
         expect(
           screen.queryByRole("button", {
-            name: "Open Accessibility Settings",
+            name: "Review Accessibility",
           }),
         ).toBeNull(),
       );
@@ -438,8 +491,15 @@ describe("App", () => {
     render(<App />);
 
     const requestButton = await screen.findByRole("button", {
-      name: "Open Accessibility Settings",
+      name: "Review Accessibility",
     });
+    expect(screen.getByText("Not verified")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Access could not be confirmed automatically. Review Accessibility if synthetic activity does not work.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Action needed")).toBeNull();
     fireEvent.click(requestButton);
     await waitFor(() =>
       expect(requestSyntheticInputAccess).toHaveBeenCalledTimes(1),
@@ -528,7 +588,10 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Range" }));
     expect(screen.getByRole("group", { name: "Days for range 1" })).toBeTruthy();
     expect(screen.getByLabelText("Start time for range 1")).toBeTruthy();
+    expect(screen.getByLabelText("End time for range 1")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Remove range 1" })).toBeTruthy();
+    expect(screen.queryByText("Days")).toBeNull();
+    expect(screen.queryByText("Time")).toBeNull();
 
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 350));

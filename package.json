@@ -1,7 +1,7 @@
 {
   "name": "never-afk",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Personal utility that keeps the machine looking active after a configurable idle confirmation flow.",
   "license": "MIT",
   "type": "module",

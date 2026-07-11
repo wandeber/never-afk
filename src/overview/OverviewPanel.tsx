@@ -32,6 +32,11 @@ type StatusPresentation = {
   tone: StatusTone;
 };
 
+type RuntimePresentation = StatusPresentation & {
+  detail: string | null;
+  isError: boolean;
+};
+
 export function runtimeTone(runtime: RuntimeSnapshot): StatusTone {
   if (runtime.lastError || runtime.phase === "error") {
     return "danger";
@@ -47,6 +52,39 @@ export function runtimeTone(runtime: RuntimeSnapshot): StatusTone {
     case "paused":
       return "neutral";
   }
+}
+
+export function runtimePresentation(
+  config: AppConfig,
+  runtime: RuntimeSnapshot,
+): RuntimePresentation {
+  if (!config.enabled && runtime.phase !== "disabled") {
+    return {
+      label: "Disabled",
+      description: "Enable automatic activity when you want never-afk to run.",
+      detail: null,
+      tone: "neutral",
+      isError: false,
+    };
+  }
+
+  if (config.enabled && runtime.phase === "disabled") {
+    return {
+      label: "Enabled",
+      description: "Automatic activity is enabled.",
+      detail: null,
+      tone: "active",
+      isError: false,
+    };
+  }
+
+  return {
+    label: runtime.statusLabel,
+    description: runtime.lastError ?? formatRuntimeNote(runtime),
+    detail: runtime.lastError ? null : runtime.detailLabel || null,
+    tone: runtimeTone(runtime),
+    isError: Boolean(runtime.lastError || runtime.phase === "error"),
+  };
 }
 
 function formatUpdateProgress(update: UpdateSnapshot) {
@@ -137,25 +175,26 @@ function RuntimeOverview({
   runtime,
   onConfigChange,
 }: Pick<OverviewPanelProps, "config" | "runtime" | "onConfigChange">) {
-  const tone = runtimeTone(runtime);
-  const runtimeMessage = runtime.lastError ?? formatRuntimeNote(runtime);
+  const presentation = runtimePresentation(config, runtime);
 
   return (
-    <section className={`runtime-card runtime-card-${tone}`}>
+    <section className={`runtime-card runtime-card-${presentation.tone}`}>
       <div className="runtime-copy" aria-live="polite">
         <div className="section-kicker-row">
           <p className="section-kicker">Automatic activity</p>
-          <StatusBadge tone={tone}>{runtime.statusLabel}</StatusBadge>
+          <StatusBadge tone={presentation.tone}>
+            {presentation.label}
+          </StatusBadge>
         </div>
-        <h1>{runtime.statusLabel}</h1>
+        <h1>{presentation.label}</h1>
         <p
           className="runtime-lead"
-          role={runtime.lastError || runtime.phase === "error" ? "alert" : undefined}
+          role={presentation.isError ? "alert" : undefined}
         >
-          {runtimeMessage}
+          {presentation.description}
         </p>
-        {!runtime.lastError && runtime.detailLabel ? (
-          <p className="runtime-detail">{runtime.detailLabel}</p>
+        {presentation.detail ? (
+          <p className="runtime-detail">{presentation.detail}</p>
         ) : null}
       </div>
 
@@ -219,33 +258,43 @@ function PermissionCard({
   }
 
   const granted = syntheticInputAccess.granted;
-  const tone: StatusTone = granted ? "success" : "warning";
+  const presentation: StatusPresentation = granted
+    ? {
+        label: "Ready",
+        description:
+          "never-afk can send the configured synthetic key to other apps.",
+        tone: "success",
+      }
+    : {
+        label: "Not verified",
+        description:
+          "Access could not be confirmed automatically. Review Accessibility if synthetic activity does not work.",
+        tone: "neutral",
+      };
 
   return (
-    <section className={`action-card action-card-${tone}`}>
+    <section className={`action-card action-card-${presentation.tone}`}>
       <div className="action-card-heading">
         <div>
           <p className="section-kicker">macOS permission</p>
           <h2>Accessibility</h2>
         </div>
-        <StatusBadge tone={tone}>{granted ? "Ready" : "Action needed"}</StatusBadge>
+        <StatusBadge tone={presentation.tone}>
+          {presentation.label}
+        </StatusBadge>
       </div>
 
-      <p className="action-card-copy">
-        {granted
-          ? "never-afk can send the configured synthetic key to other apps."
-          : "Allow never-afk in Privacy & Security → Accessibility so synthetic keys can reach other apps."}
-      </p>
+      <p className="action-card-copy">{presentation.description}</p>
 
       {!granted ? (
         <div className="action-buttons">
           <button
-            className="primary-button"
+            className="secondary-button"
             type="button"
             disabled={permissionBusy || !syntheticInputAccess.canRequest}
             onClick={onRequestSyntheticInputAccess}
           >
-            {permissionBusy ? "Opening…" : "Open Accessibility Settings"}
+            {permissionBusy ? "Opening…" : "Review Accessibility"}
           </button>
         </div>
       ) : null}
@@ -269,19 +318,23 @@ function PermissionCard({
       {syntheticInputAccess.targetPath ? (
         <details className="troubleshooting-disclosure">
           <summary>Troubleshooting</summary>
-          <p>
-            If never-afk is not in the list, show its executable in Finder and
-            drag it into Accessibility.
-          </p>
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={permissionBusy}
-            onClick={onRevealSyntheticInputAccessTarget}
-          >
-            Show never-afk in Finder
-          </button>
-          <code className="path-chip">{syntheticInputAccess.targetPath}</code>
+          <div className="troubleshooting-content">
+            <p>
+              If never-afk is not in the list, show its executable in Finder and
+              drag it into Accessibility.
+            </p>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={permissionBusy}
+              onClick={onRevealSyntheticInputAccessTarget}
+            >
+              Show never-afk in Finder
+            </button>
+            <code className="path-chip">
+              {syntheticInputAccess.targetPath}
+            </code>
+          </div>
         </details>
       ) : null}
     </section>

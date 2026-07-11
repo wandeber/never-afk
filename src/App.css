@@ -164,7 +164,6 @@ summary:focus-visible {
 .header-controls,
 .brand-mark,
 .appearance-control,
-.appearance-control select,
 .switch-control,
 .master-switch,
 .preference-inline,
@@ -251,19 +250,33 @@ summary:focus-visible {
 }
 
 .appearance-control {
-  gap: 0.55rem;
-  color: var(--text-secondary);
-  font-size: 0.78rem;
-  font-weight: 600;
+  gap: 0.18rem;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-muted);
 }
 
-.appearance-control select {
-  min-height: 2.15rem;
-  padding: 0.35rem 1.8rem 0.35rem 0.7rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 9px;
+.appearance-option {
+  min-height: 1.9rem;
+  padding: 0.28rem 0.62rem;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.appearance-option:hover:not(:disabled) {
   color: var(--text);
+  background: var(--surface-hover);
+}
+
+.appearance-option[aria-pressed="true"] {
+  color: var(--accent-text);
   background: var(--surface-raised);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 .content-body {
@@ -616,11 +629,20 @@ summary:focus-visible {
 
 .troubleshooting-disclosure,
 .release-notes {
-  gap: 0.65rem;
   margin-top: 0.82rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
   font-size: 0.82rem;
+}
+
+.troubleshooting-content {
+  display: grid;
+  gap: 0.72rem;
+  padding-top: 0.72rem;
+}
+
+.troubleshooting-content p {
+  margin: 0;
 }
 
 .troubleshooting-disclosure summary,
@@ -740,6 +762,37 @@ summary:focus-visible {
   background: var(--surface-raised);
 }
 
+.select-control {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 310px;
+}
+
+.select-control::after {
+  position: absolute;
+  top: 50%;
+  right: 0.85rem;
+  width: 0.46rem;
+  height: 0.46rem;
+  border-right: 2px solid var(--text-secondary);
+  border-bottom: 2px solid var(--text-secondary);
+  content: "";
+  pointer-events: none;
+  transform: translateY(-68%) rotate(45deg);
+}
+
+.select-control-disabled::after {
+  opacity: 0.58;
+}
+
+.preference-select {
+  max-width: none;
+  padding-right: 2.35rem;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
 .preference-input-compact {
   max-width: 96px;
 }
@@ -813,12 +866,17 @@ summary:focus-visible {
 .schedule-card-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(190px, 0.8fr);
+  align-items: center;
   gap: 0.85rem;
 }
 
 .schedule-field,
 .schedule-time-field {
   gap: 0.35rem;
+}
+
+.schedule-field-days {
+  align-content: center;
 }
 
 .schedule-field-label,
@@ -994,7 +1052,6 @@ summary:focus-visible {
     gap: 0.35rem;
   }
 
-  .appearance-control > span,
   .autosave-status {
     display: none;
   }
@@ -1037,8 +1094,8 @@ summary:focus-visible {
     height: 32px;
   }
 
-  .appearance-control select {
-    max-width: 7.2rem;
+  .appearance-option {
+    padding-inline: 0.48rem;
   }
 
   .action-card-grid {

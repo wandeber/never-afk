@@ -6,6 +6,15 @@ import type { AppearancePreference } from "./appearance";
 import type { SaveState } from "./types";
 import "./App.css";
 
+const APPEARANCE_OPTIONS: ReadonlyArray<{
+  value: AppearancePreference;
+  label: string;
+}> = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
+
 function saveStateLabel(
   saveState: SaveState,
   dirty: boolean,
@@ -109,22 +118,24 @@ function App() {
           <p className="autosave-status" role="status" aria-live="polite">
             {saveStateLabel(saveState, dirty, busy, saveError)}
           </p>
-          <label className="appearance-control">
-            <span>Appearance</span>
-            <select
-              aria-label="Appearance"
-              value={appearance}
-              onChange={(event) =>
-                setAppearance(
-                  event.currentTarget.value as AppearancePreference,
-                )
-              }
-            >
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </label>
+          <div
+            className="appearance-control"
+            role="group"
+            aria-label="Appearance"
+          >
+            {APPEARANCE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                className="appearance-option"
+                type="button"
+                aria-label={`Use ${option.label.toLowerCase()} appearance`}
+                aria-pressed={appearance === option.value}
+                onClick={() => setAppearance(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
